@@ -1,5 +1,7 @@
 """CLI parser tests."""
 
+import json
+
 from cumt_jwxt_cli.cli import build_parser, main
 from cumt_jwxt_cli.errors import ExitCode
 
@@ -57,12 +59,36 @@ def test_main_shows_help_for_grades_command(capsys) -> None:
     assert captured.err == ""
 
 
-def test_main_returns_non_zero_for_unimplemented_grades_query(capsys) -> None:
-    exit_code = main(["grades", "query", "--verbose"])
+def test_main_returns_config_error_for_missing_config(capsys, tmp_path) -> None:
+    config_path = tmp_path / "missing.json"
+
+    exit_code = main(["grades", "query", "--config", str(config_path)])
+
+    captured = capsys.readouterr()
+
+    assert exit_code == int(ExitCode.CONFIG_ERROR)
+    assert captured.out == ""
+    assert "Configuration file not found" in captured.err
+
+
+def test_main_returns_non_zero_for_unimplemented_grades_query(capsys, tmp_path) -> None:
+    config_path = tmp_path / "config.local.json"
+    config_path.write_text(
+        json.dumps(
+            {
+                "cumt": {"username": "student", "password": "secret"},
+                "query": {"year": "2024", "semester": "12"},
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    exit_code = main(["grades", "query", "--config", str(config_path), "--verbose"])
 
     captured = capsys.readouterr()
 
     assert exit_code == int(ExitCode.UNKNOWN)
     assert captured.out == ""
     assert "grades query is not implemented yet." in captured.err
-    assert "Parsed grades query arguments successfully." in captured.err
+    assert "Loaded configuration from" in captured.err
+    assert "2024-12" in captured.err

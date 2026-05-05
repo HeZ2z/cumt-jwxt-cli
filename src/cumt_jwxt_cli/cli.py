@@ -4,7 +4,8 @@ import argparse
 import sys
 from collections.abc import Sequence
 
-from cumt_jwxt_cli.errors import ExitCode
+from cumt_jwxt_cli.config import load_app_config
+from cumt_jwxt_cli.errors import ConfigError, ExitCode
 
 _NOT_IMPLEMENTED_MESSAGE = "grades query is not implemented yet."
 
@@ -32,8 +33,10 @@ def build_parser() -> argparse.ArgumentParser:
     )
     query_parser.add_argument(
         "--config",
-        default="config.local.json",
-        help="Path to the local configuration file.",
+        help=(
+            "Path to the local configuration file. Defaults to config.local.json "
+            "or config.json in the current or project directory."
+        ),
     )
     query_parser.add_argument("--year", help="Academic year, for example 2024.")
     query_parser.add_argument("--semester", help="Semester code, for example 12.")
@@ -77,9 +80,21 @@ def _print_help(args: argparse.Namespace) -> int:
 
 
 def _handle_grades_query(args: argparse.Namespace) -> int:
+    try:
+        config = load_app_config(args)
+    except ConfigError as exc:
+        print(str(exc), file=sys.stderr)
+        return int(ExitCode.CONFIG_ERROR)
+
     print(_NOT_IMPLEMENTED_MESSAGE, file=sys.stderr)
     if args.verbose:
-        print("Parsed grades query arguments successfully.", file=sys.stderr)
+        print(
+            (
+                "Loaded configuration from "
+                f"{config.config_path} for {config.query.year}-{config.query.semester}."
+            ),
+            file=sys.stderr,
+        )
     return int(ExitCode.UNKNOWN)
 
 
