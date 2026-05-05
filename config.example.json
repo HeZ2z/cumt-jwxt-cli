@@ -1,0 +1,45 @@
+{
+  "cumt": {
+    "username": "",
+    "password": ""
+  },
+  "query": {
+    "year": "2024",
+    "semester": "12"
+  },
+  "http": {
+    "timeout_seconds": 30,
+    "retry_attempts": 2,
+    "retry_backoff_seconds": 1.5
+  },
+  "grades": {
+    "include_details_on_change": true,
+    "detail_concurrency": 3
+  },
+  "captcha": {
+    "provider": "openai_compatible",
+    "manual_timeout_seconds": 60,
+    "openai_compatible": {
+      "base_url": "",
+      "api_key": "",
+      "model": ""
+    }
+  },
+  "notify": {
+    "enabled": false,
+    "smtp_host": "",
+    "smtp_port": 465,
+    "username": "",
+    "password": "",
+    "sender": "",
+    "recipients": []
+  },
+  "logging": {
+    "retention_days": 14
+  },
+  "output": {
+    "save_json": false,
+    "save_report": false,
+    "output_dir": ""
+  }
+}
