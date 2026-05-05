@@ -1,0 +1,36 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Build artifacts
+build/
+dist/
+*.egg-info/
+
+# Local system files
+.DS_Store
+.claude/settings.local.json
+
+# Local config and runtime state
+config.local.json
+config.json
+state.json
+*.log
+
+# Runtime artifacts
+logs/
+output/
+temp/
+data/
+.omx/

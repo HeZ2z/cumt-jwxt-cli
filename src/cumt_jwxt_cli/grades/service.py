@@ -1,0 +1,1 @@
+"""Grade query service placeholders."""
