@@ -155,8 +155,8 @@ uv run ruff check .
 ## HTTP 与认证约定
 
 - 使用受控的 HTTP client/session 管理 cookie，不在模块间传递裸 cookie 字符串。
-- 不把 cookie、JSESSIONID、route 等会话信息写入日志、状态文件、报告或测试 fixture。
-- 登录态只在单次运行内保留，默认不持久化。
+- 不把 cookie、JSESSIONID、route 等会话信息写入日志、报告或测试 fixture。
+- 登录态允许作为受控运行状态写入配置文件旁的 `state.json`，仅用于后续运行复用会话，不写回配置文件。
 - 认证失败应明确报错，不自动无限重试登录。
 - 所有请求应集中设置 User-Agent、超时和重试策略，避免各模块重复实现。
 
@@ -222,8 +222,8 @@ uv run ruff check .
 
 ## 状态文件约定
 
-- `state.json` 仅保存成绩变更检测所需的最小状态，例如上次查询摘要、成绩哈希、通知时间等。
-- 不在 `state.json` 中保存账号、密码、API Key、cookie、session、验证码图片或完整敏感响应。
+- `state.json` 保存受控运行状态，包括必要的登录态和成绩变更检测状态，例如会话 cookie、上次成绩快照、查询时间、通知时间等。
+- `state.json` 中不得保存账号、密码、API Key、验证码图片、完整原始响应正文或其他超出运行复用所需范围的敏感数据。
 - 状态文件结构变更时应保持简单可迁移；首版不引入数据库。
 - 状态写入应尽量采用原子写入，避免中途中断导致文件损坏。
 - 状态读取失败时应给出清晰错误；不要静默覆盖无法解析的既有状态文件。
@@ -252,5 +252,5 @@ uv run ruff check .
 - 代码修改符合现有分层和安全约定。
 - 新增或修改业务逻辑已有对应测试。
 - 已运行相关测试；提交前至少运行 `uv run ruff check .` 和 `uv run pytest`。
-- 未写入或提交真实配置、运行状态、日志、验证码、cookie、session 或其他敏感产物。
+- 未写入或提交真实配置、真实运行状态、日志、验证码、cookie、session 或其他敏感产物。
 - README、`config.example.json`、CLI help 与实际行为保持一致。
