@@ -8,6 +8,7 @@ from datetime import date, datetime, timedelta
 from pathlib import Path
 
 _SECRET_PATTERNS = (
+    re.compile(r"(?i)((?:set-)?cookie\s*:\s*).+"),
     re.compile(r"(?i)(password\s*=\s*)[^&\s,;]+"),
     re.compile(r"(?i)(api[_-]?key\s*=\s*)[^&\s,;]+"),
     re.compile(r"(?i)(JSESSIONID\s*=\s*)[^&\s,;]+"),

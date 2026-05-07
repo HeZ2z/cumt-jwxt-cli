@@ -20,8 +20,7 @@ cumt-jwxt grades query
 
 当前仍未完成的能力：
 
-- 更完整的公开使用文档和定时任务示例
-- README 的常见故障、免责声明与更完整保存产物说明
+- 更细的人工验证码 fallback 体验
 
 ## 安装与验证
 
@@ -76,6 +75,46 @@ CLI 参数 > CUMT_JWXT_* 环境变量 > config.local.json > 默认值
 
 当前 HTML 报告在拿到详细成绩时会追加成绩构成区块；若单门详情查询或解析失败，会退化为只发送成绩列表，不中断整体查询。
 
+## 保存产物
+
+默认情况下，查询结果只用于当前终端输出、邮件通知和 `state.json` 更新，不会额外保存 JSON 或 HTML 文件。
+
+如需保存查询结果：
+
+```bash
+uv run cumt-jwxt grades query --save-json --save-report --output-dir ./output
+```
+
+这会在 `output_dir` 下写入：
+
+- `grades.json`
+- `grade_report.html`
+
+未显式指定 `--output-dir` 时，会默认写到配置文件同目录下的 `output/`。
+
+## 定时任务示例
+
+适合 cron 的最小命令：
+
+```bash
+cd /Users/hezzz/Codes/Projects/Automation/cumt-query-score
+uv run cumt-jwxt grades query --config ./config.local.json --no-interactive
+```
+
+示例 cron：
+
+```cron
+*/30 * * * * cd /Users/hezzz/Codes/Projects/Automation/cumt-query-score && uv run cumt-jwxt grades query --config ./config.local.json --no-interactive
+```
+
+建议在定时任务里始终使用：
+
+- 显式 `--config`
+- `--no-interactive`
+- 固定工作目录
+
+这样可以避免因为 TTY、路径或默认配置探测差异导致任务行为不稳定。
+
 ## 邮件通知
 
 邮件通知默认关闭。配置 `notify.enabled = true` 后，只有检测到成绩变化或显式传入 `--force-email` 时才发送。
@@ -113,8 +152,46 @@ uv run cumt-jwxt grades query --no-proxy
 
 - 项目已包含 `socksio` 依赖，用于支持通过 SOCKS 代理访问 JWXT。
 
+## 常见故障
+
+- `Configuration file not found`
+  - 先复制 `config.example.json` 为 `config.local.json`
+  - 或显式传入 `--config /path/to/config.local.json`
+
+- `Missing required configuration`
+  - 交互模式下重新运行并补全缺失字段
+  - 自动化运行时检查 `config.local.json` 和 `CUMT_JWXT_*` 环境变量
+
+- `JWXT network check failed` / `timed out`
+  - 检查当前网络是否能访问 `jwxt.cumt.edu.cn`
+  - 检查系统代理是否可用
+  - 如需直连，使用 `--no-proxy`
+
+- `JWXT login failed`
+  - 检查学号、密码和验证码识别配置
+  - 若已有 `state.json`，确认其中会话是否过期并允许程序重新登录
+
+- `SMTP authentication failed`
+  - 检查 `notify.username`、`notify.password`
+  - 某些服务商需要授权码而不是邮箱登录密码
+
+- 邮件发件人显示不符合预期
+  - `notify.sender` 是邮箱地址
+  - `notify.sender_name` 是显示名
+  - 某些服务商会强制改写 `From`
+
+## 免责声明
+
+本项目仅用于个人自动化查询本人教务成绩信息。使用者应自行确保：
+
+- 遵守学校教务系统使用规范
+- 控制查询频率，避免对教务系统造成不必要压力
+- 妥善保管本地配置、状态文件和邮件账号凭据
+
+项目默认遵循“最小必要保存”原则，但本地运行环境、邮件服务商和代理环境仍可能引入额外风险，使用前应自行评估。
+
 ## 安全说明
 
 - 不要提交 `config.local.json`、`state.json`、日志、输出文件或任何真实运行产物。
 - 不要在测试、日志或调试文件中保存账号、密码、cookie、session、API Key 或验证码图片。
-- 当前日志实现包含基础敏感字段脱敏，但仍应避免主动记录敏感原始数据。
+- 当前日志实现会脱敏密码、API Key、JSESSIONID、route 以及 `Cookie`/`Set-Cookie` 头，但仍应避免主动记录敏感原始数据。
