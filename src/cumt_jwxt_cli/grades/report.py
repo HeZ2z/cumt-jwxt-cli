@@ -3,7 +3,12 @@
 from collections.abc import Sequence
 from html import escape
 
-from cumt_jwxt_cli.models import CourseGrade, GradeChange, GradeSnapshotEntry
+from cumt_jwxt_cli.models import (
+    CourseGrade,
+    GradeChange,
+    GradeDetail,
+    GradeSnapshotEntry,
+)
 
 
 def build_text_summary(
@@ -38,6 +43,7 @@ def build_html_report(
     *,
     grades: Sequence[CourseGrade],
     changes: Sequence[GradeChange],
+    details: Sequence[GradeDetail] = (),
     year: str,
     semester: str,
     queried_at: str,
@@ -50,6 +56,7 @@ def build_html_report(
         else "<li>No grade changes detected.</li>"
     )
     grade_rows = "\n".join(_grade_row(grade) for grade in grades)
+    details_section = _details_section(details)
 
     return (
         "<!doctype html>\n"
@@ -74,6 +81,7 @@ def build_html_report(
         "    </thead>\n"
         f"    <tbody>\n{grade_rows}\n    </tbody>\n"
         "  </table>\n"
+        f"{details_section}"
         "</body>\n"
         "</html>\n"
     )
@@ -123,3 +131,32 @@ def _grade_row(grade: CourseGrade) -> str:
     )
     cell_html = "".join(f"<td>{escape(cell)}</td>" for cell in cells)
     return f"      <tr>{cell_html}</tr>"
+
+
+def _details_section(details: Sequence[GradeDetail]) -> str:
+    if not details:
+        return ""
+
+    sections = []
+    for detail in details:
+        rows = "\n".join(
+            "      <tr>"
+            f"<td>{escape(component.name)}</td>"
+            f"<td>{escape(component.percentage)}</td>"
+            f"<td>{escape(component.score)}</td>"
+            "</tr>"
+            for component in detail.components
+        )
+        sections.append(
+            "  <section>\n"
+            f"    <h3>{escape(detail.course_code)} "
+            f"{escape(detail.course_name)}</h3>\n"
+            "    <table>\n"
+            "      <thead>\n"
+            "        <tr><th>Component</th><th>Percentage</th><th>Score</th></tr>\n"
+            "      </thead>\n"
+            f"      <tbody>\n{rows}\n      </tbody>\n"
+            "    </table>\n"
+            "  </section>\n"
+        )
+    return "  <h2>Grade details</h2>\n" + "".join(sections)

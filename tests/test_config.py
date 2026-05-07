@@ -14,6 +14,7 @@ def _query_args(**overrides: object) -> Namespace:
         "config": None,
         "year": None,
         "semester": None,
+        "no_interactive": True,
         "save_json": False,
         "save_report": False,
         "output_dir": None,
@@ -33,7 +34,10 @@ def test_load_app_config_reads_required_fields(tmp_path) -> None:
         {
             "cumt": {"username": "student", "password": "secret"},
             "query": {"year": "2024", "semester": "12"},
-            "notify": {"recipients": ["user@example.test"]},
+            "notify": {
+                "sender_name": "cumt-jwxt-cli",
+                "recipients": ["user@example.test"],
+            },
         },
     )
 
@@ -46,6 +50,7 @@ def test_load_app_config_reads_required_fields(tmp_path) -> None:
     assert config.query.semester == "12"
     assert config.http.timeout_seconds == 30.0
     assert config.grades.detail_concurrency == 3
+    assert config.notify.sender_name == "cumt-jwxt-cli"
     assert config.notify.recipients == ("user@example.test",)
 
 
@@ -111,6 +116,90 @@ def test_load_app_config_missing_required_field_fails(tmp_path) -> None:
 
     with pytest.raises(ConfigError, match="cumt.password"):
         load_app_config(_query_args(config=str(config_path)))
+
+
+def test_load_app_config_interactively_creates_missing_config(
+    tmp_path,
+    monkeypatch,
+) -> None:
+    config_path = tmp_path / "config.local.json"
+    answers = iter(
+        [
+            "student",
+            "secret",
+            "2026",
+            "3",
+            "https://captcha.example.test/v1",
+            "captcha-key",
+            "captcha-model",
+        ]
+    )
+
+    monkeypatch.setattr("sys.stdin.isatty", lambda: True)
+    monkeypatch.setattr("builtins.input", lambda prompt: next(answers))
+
+    config = load_app_config(
+        _query_args(config=str(config_path), no_interactive=False)
+    )
+
+    written = json.loads(config_path.read_text(encoding="utf-8"))
+    assert config.cumt.username == "student"
+    assert config.cumt.password == "secret"
+    assert config.query.year == "2026"
+    assert config.query.semester == "3"
+    assert config.captcha.openai_compatible.api_key == "captcha-key"
+    assert written["cumt"]["username"] == "student"
+    assert written["captcha"]["openai_compatible"]["model"] == "captcha-model"
+
+
+def test_load_app_config_interactively_completes_missing_fields(
+    tmp_path,
+    monkeypatch,
+) -> None:
+    config_path = tmp_path / "config.local.json"
+    _write_config(
+        config_path,
+        {
+            "cumt": {"username": "student", "password": ""},
+            "query": {"year": "2026", "semester": "3"},
+        },
+    )
+    answers = iter(["secret", "", "", ""])
+
+    monkeypatch.setattr("sys.stdin.isatty", lambda: True)
+    monkeypatch.setattr("builtins.input", lambda prompt: next(answers))
+
+    config = load_app_config(
+        _query_args(config=str(config_path), no_interactive=False)
+    )
+
+    written = json.loads(config_path.read_text(encoding="utf-8"))
+    assert config.cumt.password == "secret"
+    assert written["cumt"]["password"] == "secret"
+    assert written["query"]["year"] == "2026"
+
+
+def test_load_app_config_interactive_skips_env_backed_fields(
+    tmp_path,
+    monkeypatch,
+) -> None:
+    config_path = tmp_path / "config.local.json"
+    _write_config(config_path, {"query": {"year": "2026", "semester": "3"}})
+    answers = iter(["https://captcha.example.test/v1", "captcha-key", "model"])
+
+    monkeypatch.setattr("sys.stdin.isatty", lambda: True)
+    monkeypatch.setattr("builtins.input", lambda prompt: next(answers))
+    monkeypatch.setenv("CUMT_JWXT_USERNAME", "env-user")
+    monkeypatch.setenv("CUMT_JWXT_PASSWORD", "env-password")
+
+    config = load_app_config(
+        _query_args(config=str(config_path), no_interactive=False)
+    )
+
+    written = json.loads(config_path.read_text(encoding="utf-8"))
+    assert config.cumt.username == "env-user"
+    assert config.cumt.password == "env-password"
+    assert "cumt" not in written
 
 
 def test_load_app_config_invalid_json_fails(tmp_path) -> None:

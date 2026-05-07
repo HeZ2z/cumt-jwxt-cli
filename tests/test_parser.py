@@ -3,8 +3,8 @@
 import pytest
 
 from cumt_jwxt_cli.errors import ParseError
-from cumt_jwxt_cli.grades.parser import parse_grade_list
-from cumt_jwxt_cli.models import CourseGrade
+from cumt_jwxt_cli.grades.parser import parse_grade_detail, parse_grade_list
+from cumt_jwxt_cli.models import CourseGrade, GradeDetail, GradeDetailComponent
 
 
 def test_parse_grade_list_reads_course_grades() -> None:
@@ -114,3 +114,67 @@ def test_parse_grade_list_converts_blank_optional_fields_to_none() -> None:
             course_type="任选",
         )
     ]
+
+
+def test_parse_grade_detail_reads_score_components() -> None:
+    html = """
+    <html>
+      <body>
+        <span class="red2"> 高等数学 </span>
+        <table id="subtab">
+          <tbody>
+            <tr><td>【平时】</td><td>30%</td><td>90</td></tr>
+            <tr><td>期末</td><td>70%</td><td>95</td></tr>
+          </tbody>
+        </table>
+      </body>
+    </html>
+    """
+
+    assert parse_grade_detail(
+        html,
+        course_code="MATH101",
+        fallback_course_name="fallback",
+    ) == GradeDetail(
+        course_code="MATH101",
+        course_name="高等数学",
+        components=(
+            GradeDetailComponent(name="平时", percentage="30%", score="90"),
+            GradeDetailComponent(name="期末", percentage="70%", score="95"),
+        ),
+    )
+
+
+def test_parse_grade_detail_uses_fallback_course_name() -> None:
+    html = """
+    <table id="subtab">
+      <tr><td>平时</td><td>30%</td><td>90</td></tr>
+    </table>
+    """
+
+    assert (
+        parse_grade_detail(
+            html,
+            course_code="MATH101",
+            fallback_course_name="高等数学",
+        ).course_name
+        == "高等数学"
+    )
+
+
+def test_parse_grade_detail_rejects_missing_component_table() -> None:
+    with pytest.raises(ParseError, match="table#subtab"):
+        parse_grade_detail(
+            "<html></html>",
+            course_code="MATH101",
+            fallback_course_name="高等数学",
+        )
+
+
+def test_parse_grade_detail_rejects_empty_components() -> None:
+    with pytest.raises(ParseError, match="score components"):
+        parse_grade_detail(
+            '<table id="subtab"><tr><th>name</th></tr></table>',
+            course_code="MATH101",
+            fallback_course_name="高等数学",
+        )
