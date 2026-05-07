@@ -20,7 +20,7 @@ cumt-jwxt grades query
 
 当前仍未完成的能力：
 
-- 暂无已知首版主链路缺口
+- HTML 模版和样式优化
 
 ## 安装与验证
 
@@ -102,14 +102,14 @@ uv run cumt-jwxt grades query --save-json --save-report --output-dir ./output
 适合 cron 的最小命令：
 
 ```bash
-cd /Users/hezzz/Codes/Projects/Automation/cumt-query-score
+cd /path/to/cumt-query-score
 uv run cumt-jwxt grades query --config ./config.local.json --no-interactive
 ```
 
 示例 cron：
 
 ```cron
-*/30 * * * * cd /Users/hezzz/Codes/Projects/Automation/cumt-query-score && uv run cumt-jwxt grades query --config ./config.local.json --no-interactive
+*/30 * * * * cd /path/to/cumt-query-score && uv run cumt-jwxt grades query --config ./config.local.json --no-interactive
 ```
 
 建议在定时任务里始终使用：
