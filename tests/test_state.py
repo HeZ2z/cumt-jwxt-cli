@@ -24,6 +24,8 @@ from cumt_jwxt_cli.state import load_runtime_state, save_runtime_state
 
 _ALLOWED_STATE_KEYS = {
     "schema_version",
+    "session_cookies",
+    "session_updated_at",
     "last_grade_snapshot",
     "last_successful_query_at",
     "last_notified_at",
@@ -64,7 +66,9 @@ def test_load_runtime_state_returns_default_when_missing(tmp_path) -> None:
     config = _app_config(tmp_path / "config.local.json")
 
     assert load_runtime_state(config) == RuntimeState(
-        schema_version=1,
+        schema_version=2,
+        session_cookies={},
+        session_updated_at=None,
         last_grade_snapshot=(),
         last_successful_query_at=None,
         last_notified_at=None,
@@ -74,7 +78,9 @@ def test_load_runtime_state_returns_default_when_missing(tmp_path) -> None:
 def test_runtime_state_round_trip(tmp_path) -> None:
     config = _app_config(tmp_path / "config.local.json")
     state = RuntimeState(
-        schema_version=1,
+        schema_version=2,
+        session_cookies={"JSESSIONID": "session-id", "route": "route-id"},
+        session_updated_at="2026-05-05T11:59:00+08:00",
         last_grade_snapshot=(
             GradeSnapshotEntry(course_code="A001", course_name="高等数学", score="95"),
         ),
@@ -112,6 +118,8 @@ def test_load_runtime_state_rejects_older_schema_version(tmp_path) -> None:
         json.dumps(
             {
                 "schema_version": 0,
+                "session_cookies": {},
+                "session_updated_at": None,
                 "last_grade_snapshot": [],
                 "last_successful_query_at": None,
                 "last_notified_at": None,
@@ -129,7 +137,9 @@ def test_load_runtime_state_rejects_newer_schema_version(tmp_path) -> None:
     (tmp_path / "state.json").write_text(
         json.dumps(
             {
-                "schema_version": 2,
+                "schema_version": 3,
+                "session_cookies": {},
+                "session_updated_at": None,
                 "last_grade_snapshot": [],
                 "last_successful_query_at": None,
                 "last_notified_at": None,
@@ -147,7 +157,9 @@ def test_load_runtime_state_rejects_invalid_timestamp(tmp_path) -> None:
     (tmp_path / "state.json").write_text(
         json.dumps(
             {
-                "schema_version": 1,
+                "schema_version": 2,
+                "session_cookies": {},
+                "session_updated_at": None,
                 "last_grade_snapshot": [],
                 "last_successful_query_at": "not-a-timestamp",
                 "last_notified_at": None,
@@ -163,7 +175,9 @@ def test_load_runtime_state_rejects_invalid_timestamp(tmp_path) -> None:
 def test_save_runtime_state_uses_strict_top_level_schema(tmp_path) -> None:
     config = _app_config(tmp_path / "config.local.json")
     state = RuntimeState(
-        schema_version=1,
+        schema_version=2,
+        session_cookies={"JSESSIONID": "session-id", "route": "route-id"},
+        session_updated_at="2026-05-05T11:59:00+08:00",
         last_grade_snapshot=(
             GradeSnapshotEntry(course_code="A001", course_name="高等数学", score="95"),
         ),
@@ -175,22 +189,27 @@ def test_save_runtime_state_uses_strict_top_level_schema(tmp_path) -> None:
 
     serialized = json.loads((tmp_path / "state.json").read_text(encoding="utf-8"))
     assert set(serialized) == _ALLOWED_STATE_KEYS
-    assert serialized["schema_version"] == 1
+    assert serialized["schema_version"] == 2
+    assert serialized["session_cookies"] == {
+        "JSESSIONID": "session-id",
+        "route": "route-id",
+    }
+    assert serialized["session_updated_at"] == "2026-05-05T11:59:00+08:00"
     assert serialized["last_grade_snapshot"] == [
         {"course_code": "A001", "course_name": "高等数学", "score": "95"}
     ]
     assert "username" not in serialized
     assert "password" not in serialized
-    assert "cookie" not in serialized
-    assert "session" not in serialized
-    assert "JSESSIONID" not in serialized
-    assert "route" not in serialized
+    assert "username" not in json.dumps(serialized)
+    assert "password" not in json.dumps(serialized)
 
 
 def test_save_runtime_state_rejects_unsupported_schema_version(tmp_path) -> None:
     config = _app_config(tmp_path / "config.local.json")
     state = RuntimeState(
-        schema_version=2,
+        schema_version=3,
+        session_cookies={},
+        session_updated_at=None,
         last_grade_snapshot=(),
         last_successful_query_at=None,
         last_notified_at=None,
@@ -203,7 +222,9 @@ def test_save_runtime_state_rejects_unsupported_schema_version(tmp_path) -> None
 def test_save_runtime_state_rejects_invalid_timestamp(tmp_path) -> None:
     config = _app_config(tmp_path / "config.local.json")
     state = RuntimeState(
-        schema_version=1,
+        schema_version=2,
+        session_cookies={},
+        session_updated_at=None,
         last_grade_snapshot=(),
         last_successful_query_at="  ",
         last_notified_at=None,
@@ -216,7 +237,9 @@ def test_save_runtime_state_rejects_invalid_timestamp(tmp_path) -> None:
 def test_runtime_state_round_trip_preserves_utc_z_suffix(tmp_path) -> None:
     config = _app_config(tmp_path / "config.local.json")
     state = RuntimeState(
-        schema_version=1,
+        schema_version=2,
+        session_cookies={},
+        session_updated_at=None,
         last_grade_snapshot=(),
         last_successful_query_at="2026-05-05T04:00:00Z",
         last_notified_at="2026-05-05T04:05:00Z",
@@ -225,3 +248,51 @@ def test_runtime_state_round_trip_preserves_utc_z_suffix(tmp_path) -> None:
     save_runtime_state(config, state)
 
     assert load_runtime_state(config) == state
+
+
+def test_load_runtime_state_migrates_schema_v1_without_session(tmp_path) -> None:
+    config = _app_config(tmp_path / "config.local.json")
+    (tmp_path / "state.json").write_text(
+        json.dumps(
+            {
+                "schema_version": 1,
+                "last_grade_snapshot": [
+                    {"course_code": "A001", "course_name": "高等数学", "score": "95"}
+                ],
+                "last_successful_query_at": "2026-05-05T12:00:00+08:00",
+                "last_notified_at": None,
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    assert load_runtime_state(config) == RuntimeState(
+        schema_version=2,
+        session_cookies={},
+        session_updated_at=None,
+        last_grade_snapshot=(
+            GradeSnapshotEntry(course_code="A001", course_name="高等数学", score="95"),
+        ),
+        last_successful_query_at="2026-05-05T12:00:00+08:00",
+        last_notified_at=None,
+    )
+
+
+def test_load_runtime_state_rejects_invalid_session_cookie_value(tmp_path) -> None:
+    config = _app_config(tmp_path / "config.local.json")
+    (tmp_path / "state.json").write_text(
+        json.dumps(
+            {
+                "schema_version": 2,
+                "session_cookies": {"JSESSIONID": 123},
+                "session_updated_at": None,
+                "last_grade_snapshot": [],
+                "last_successful_query_at": None,
+                "last_notified_at": None,
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(StateError, match="cookie values"):
+        load_runtime_state(config)
