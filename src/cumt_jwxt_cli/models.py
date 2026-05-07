@@ -140,3 +140,13 @@ class RuntimeState:
     last_grade_snapshot: tuple[GradeSnapshotEntry, ...]
     last_successful_query_at: str | None
     last_notified_at: str | None
+
+
+@dataclass(frozen=True)
+class GradeQueryResult:
+    """Pure business result for a completed grade query workflow."""
+
+    grades: tuple[CourseGrade, ...]
+    snapshot: tuple[GradeSnapshotEntry, ...]
+    changes: tuple[GradeChange, ...]
+    state: RuntimeState
