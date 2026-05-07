@@ -110,8 +110,10 @@ class CourseGrade:
     score: str
     credit: str | None = None
     grade_point: str | None = None
+    credit_grade_point: str | None = None
     course_type: str | None = None
     exam_type: str | None = None
+    teacher_name: str | None = None
     teaching_class_id: str | None = None
 
 

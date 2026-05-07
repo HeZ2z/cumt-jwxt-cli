@@ -15,17 +15,47 @@ cumt-jwxt grades query
 - 成绩列表 JSON 解析、详情 HTML 解析、快照比较、文本/HTML 报告生成
 - HTTP 客户端、登录流程、OpenAI 兼容验证码识别、SMTP 邮件发送的边界层实现
 - 基础 session 复用与会话失效回退登录
-- 仅在有变更或 `--force-email` 时抓取详细成绩构成，并合入 HTML 报告
+- 基于 Jinja2 单文件模板生成 HTML 邮件/本地报告
+- 在有变更、`--force-email` 或 `--save-report` 时抓取详细成绩构成，并合入 HTML 报告
 - `grades query` 的最小闭环：网络检测 -> 尝试复用 session 查成绩 -> 失效时登录 -> 查询/按需抓详情/报告/通知 -> 更新 `state.json`
 
-当前仍未完成的能力：
+## 安装
 
-- HTML 模版和样式优化
-
-## 安装与验证
+先克隆仓库：
 
 ```bash
-uv sync
+git clone https://github.com/HeZ2z/cumt-jwxt-cli.git
+cd cumt-jwxt-cli
+```
+
+### 使用 uv（推荐）
+
+```bash
+uv sync --python 3.12
+uv run cumt-jwxt --help
+```
+
+### 使用 pip
+
+如果你不使用 `uv`，也可以直接安装当前项目：
+
+```bash
+python -m venv .venv
+source .venv/bin/activate
+pip install -U pip
+pip install .
+cumt-jwxt --help
+```
+
+如果只是本地开发，也可以使用可编辑安装：
+
+```bash
+pip install -e .
+```
+
+## 验证
+
+```bash
 uv run cumt-jwxt --help
 uv run cumt-jwxt grades --help
 uv run cumt-jwxt grades query --help
@@ -52,6 +82,55 @@ CLI 参数 > CUMT_JWXT_* 环境变量 > config.local.json > 默认值
 
 交互模式下，如果 `config.local.json` 缺失或缺少必要字段，CLI 会按 `config.example.json` 的结构提示补全并写回配置文件；`--no-interactive` 或非 TTY 环境下仍会快速失败。
 
+## 最小配置示例
+
+下面是一个裁剪过的最小可运行配置，敏感字段请只填写到本地 `config.local.json`：
+
+```json
+{
+  "cumt": {
+    "username": "your-student-id",
+    "password": "your-password"
+  },
+  "query": {
+    "year": "2026",
+    "semester": "3"
+  },
+  "captcha": {
+    "provider": "openai_compatible",
+    "manual_timeout_seconds": 60,
+    "openai_compatible": {
+      "base_url": "https://your-openai-compatible-endpoint",
+      "api_key": "your-api-key",
+      "model": "your-model-name"
+    }
+  },
+  "notify": {
+    "enabled": false,
+    "smtp_host": "",
+    "smtp_port": 465,
+    "username": "",
+    "password": "",
+    "sender": "",
+    "sender_name": "cumt-jwxt-cli",
+    "recipients": []
+  },
+  "output": {
+    "save_json": false,
+    "save_report": false,
+    "output_dir": ""
+  }
+}
+```
+
+其中：
+
+- `cumt.username` 和 `cumt.password` 是教务系统登录账号密码。
+- `query.year` 和 `query.semester` 是查询的学年学期，例如 `2026` 和 `3` 分别代表 2025-2026 学年第二学期，`query.semester` 的值可以是 `3`（代表第一学期）或 `12`（代表第二学期）或 `16`（代表第三学期，但是我们真的有第三学期吗？），留空为全年查询。
+- `captcha` 配置了验证码识别方式和相关参数，`openai_compatible` 是一个兼容 OpenAI API 的验证码识别实现，要求提供 `base_url`、`api_key` 和 `model`。
+- `notify` 配置了邮件通知相关参数，默认关闭。若开启，需要提供 SMTP 服务器地址、端口、登录凭据、发件人地址和收件人列表。
+- `output` 配置了是否保存 JSON 和 HTML 报告，以及输出目录，默认不开启保存，输出目录默认为配置文件同目录下的 `output/`。
+
 ## 当前行为
 
 `uv run cumt-jwxt grades query --config ./config.local.json` 目前会执行：
@@ -65,7 +144,10 @@ CLI 参数 > CUMT_JWXT_* 环境变量 > config.local.json > 默认值
 7. 登录 JWXT，登录提交后的 302 跳转视为成功登录
 8. 重新查询成绩列表 JSON
 9. 解析成绩并生成快照
-10. 在启用 `grades.include_details_on_change` 且有变更或 `--force-email` 时抓取详细成绩构成
+10. 在启用 `grades.include_details_on_change` 时，遇到以下任一条件则抓取详细成绩构成：
+    - 有成绩变更
+    - 显式传入 `--force-email`
+    - 显式启用 `--save-report`
 11. 输出纯文本摘要
 12. 在启用通知且有变更或 `--force-email` 时发送 HTML 邮件
 13. 将 session、快照和查询时间写入配置文件旁的 `state.json`
@@ -79,6 +161,24 @@ CLI 参数 > CUMT_JWXT_* 环境变量 > config.local.json > 默认值
 当前 HTML 报告在拿到详细成绩时会追加成绩构成区块；若单门详情查询或解析失败，会退化为只发送成绩列表，不中断整体查询。
 
 验证码自动识别失败时，交互模式会把验证码图片写入系统临时文件，终端显示临时路径，并在 `captcha.manual_timeout_seconds` 内等待输入。输入完成、超时或失败后会清理临时文件。非交互环境不会等待人工输入，会直接失败，避免定时任务卡住。
+
+## HTML 报告说明
+
+当前 HTML 报告采用单文件模板，兼顾本地查看和邮件通知场景，默认是偏朴素的事务型通知风格。
+
+- 顶部统计区只展示确定性统计：
+  - 当前课程数
+  - 变更数量
+  - 总学分
+- 当前成绩区按课程条目展示：
+  - 课程名
+  - 课程号、学分、课程性质
+  - 绩点（系统字段 `jd`）
+  - 学分绩点（系统字段 `xfjd`）
+  - 任课教师（系统字段 `jsxm`）
+- 若成功拿到课程详情，会追加“成绩构成”区块。
+- 详情中若已有 `总评 / 总成绩 / 最终成绩 / 课程总评 / 课程总成绩`，报告会自动去重，避免重复展示总评。
+- 无法计入总学分的课程会在报告底部单独说明。
 
 ## 保存产物
 
@@ -102,14 +202,14 @@ uv run cumt-jwxt grades query --save-json --save-report --output-dir ./output
 适合 cron 的最小命令：
 
 ```bash
-cd /path/to/cumt-query-score
+cd /path/to/cumt-jwxt-cli
 uv run cumt-jwxt grades query --config ./config.local.json --no-interactive
 ```
 
 示例 cron：
 
 ```cron
-*/30 * * * * cd /path/to/cumt-query-score && uv run cumt-jwxt grades query --config ./config.local.json --no-interactive
+*/30 * * * * cd /path/to/cumt-jwxt-cli && uv run cumt-jwxt grades query --config ./config.local.json --no-interactive
 ```
 
 建议在定时任务里始终使用：
@@ -157,6 +257,21 @@ uv run cumt-jwxt grades query --no-proxy
 
 - 项目已包含 `socksio` 依赖，用于支持通过 SOCKS 代理访问 JWXT。
 
+## 开发说明
+
+- 开发工具链：`uv` + `pytest` + `ruff`
+- 常用命令：
+
+```bash
+uv sync
+uv run pytest
+uv run ruff check .
+```
+
+- CLI 入口：`cumt_jwxt_cli.cli:main`
+- 成绩报告模板：`src/cumt_jwxt_cli/grades/templates/email_report.html`
+- 仅报告样式调整时，优先修改模板文件，不要把 HTML/CSS 拼回 Python 代码里。
+
 ## 常见故障
 
 - `Configuration file not found`
@@ -200,3 +315,7 @@ uv run cumt-jwxt grades query --no-proxy
 - 不要提交 `config.local.json`、`state.json`、日志、输出文件或任何真实运行产物。
 - 不要在测试、日志或调试文件中保存账号、密码、cookie、session、API Key 或验证码图片。
 - 当前日志实现会脱敏密码、API Key、JSESSIONID、route 以及 `Cookie`/`Set-Cookie` 头，但仍应避免主动记录敏感原始数据。
+
+## 许可证
+
+本项目使用 [MIT License](LICENSE)。

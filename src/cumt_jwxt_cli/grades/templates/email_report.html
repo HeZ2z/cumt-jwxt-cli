@@ -1,0 +1,147 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{{ page_title }}</title>
+  <style>
+    .has-stat-border { border-right: 1px solid #d9d9d9; }
+    .has-field-border { border-right: 1px solid #e6e6e6; }
+    .score-excellent { border-color: #2c5530; background-color: #edf7ef; color: #2c5530; }
+    .score-good { border-color: #1f4d80; background-color: #eef4fb; color: #1f4d80; }
+    .score-pass { border-color: #8a5a20; background-color: #fbf5ec; color: #8a5a20; }
+    .score-fail { border-color: #8b0000; background-color: #fceeee; color: #8b0000; }
+    .score-neutral { border-color: #555555; background-color: #f6f6f6; color: #555555; }
+    .preview-muted { color: #9a9a9a; }
+  </style>
+</head>
+<body style="margin:0;padding:0;background-color:#f5f5f5;color:#2c2c2c;font-family:'Times New Roman',Georgia,'Songti SC','STSong',serif;line-height:1.45;">
+  <div style="margin:0;padding:20px 12px;background-color:#f5f5f5;">
+    <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="border-collapse:collapse;">
+      <tr>
+        <td align="center">
+          <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="border-collapse:collapse;max-width:720px;background-color:#ffffff;">
+            <tr>
+              <td style="padding:0 20px 12px;">
+                <div style="font-size:24px;line-height:1.2;font-weight:700;color:#2c2c2c;text-align:center;">CUMT 成绩报告</div>
+                <div class="preview-muted" style="margin-top:8px;font-size:15px;line-height:1.5;color:#666666;text-align:center;">{{ term_label }} | 查询时间：{{ queried_at }}</div>
+              </td>
+            </tr>
+            <tr>
+              <td style="padding:0 20px 28px;">
+                <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="margin:8px 0 0;border-collapse:collapse;border:1px solid #d9d9d9;background-color:#fafafa;">
+                  <tr>
+                    {% for stat in stats %}
+                    <td class="{{ stat.border_class }}" style="width:{{ stat.width }};padding:14px 12px;text-align:center;background-color:#fafafa;">
+                      <div style="font-size:18px;line-height:1.2;font-weight:700;color:#2c2c2c;">{{ stat.value }}</div>
+                      <div style="margin-top:4px;font-size:11px;line-height:1.4;color:#666666;">{{ stat.label }}</div>
+                    </td>
+                    {% endfor %}
+                  </tr>
+                </table>
+
+                <div style="margin:24px 0 0;font-size:20px;line-height:1.3;font-weight:700;color:#2c2c2c;">变更摘要</div>
+                <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="margin:14px 0 0;border-collapse:collapse;border:1px solid #d9d9d9;">
+                  {% if changes %}
+                    {% for change in changes %}
+                    <tr>
+                      <td style="padding:18px;border-bottom:1px solid #e6e6e6;">
+                        <div style="font-size:14px;line-height:1.4;color:#8a4b16;font-weight:700;">{{ change.status }}</div>
+                        <div style="margin-top:6px;font-size:20px;line-height:1.3;color:#2c2c2c;font-weight:700;">{{ change.course_name }}</div>
+                        <div style="margin-top:6px;font-size:14px;line-height:1.5;color:#666666;">{{ change.score_display }}</div>
+                        <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="margin-top:14px;border-collapse:collapse;border-left:4px solid #2c2c2c;">
+                          <tr>
+                            {% for field in change.fields %}
+                            <td width="{{ field.width }}" class="{{ field.border_class }} field-muted-bg" style="padding:16px 18px;vertical-align:top;">
+                              <div style="font-size:12px;line-height:1.4;color:#666666;">{{ field.label }}</div>
+                              <div style="margin-top:8px;font-size:16px;line-height:1.4;color:#2c2c2c;font-weight:700;">{{ field.value }}</div>
+                            </td>
+                            {% endfor %}
+                          </tr>
+                        </table>
+                        {% if change.detail_summary %}
+                        <div style="margin-top:10px;font-size:13px;color:#666666;">成绩构成：{{ change.detail_summary }}</div>
+                        {% endif %}
+                      </td>
+                    </tr>
+                    {% endfor %}
+                  {% else %}
+                    <tr>
+                      <td style="padding:16px 18px;font-size:14px;color:#666666;">未检测到成绩变化</td>
+                    </tr>
+                  {% endif %}
+                </table>
+
+                <div style="margin:26px 0 0;font-size:18px;line-height:1.3;font-weight:700;color:#2c2c2c;">当前成绩</div>
+                {% for course in courses %}
+                <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="margin:14px 0 0;border-collapse:collapse;">
+                  <tr>
+                    <td style="padding:0 0 14px;">
+                      <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="border-collapse:collapse;">
+                        <tr>
+                          <td style="padding:0 16px 0 0;vertical-align:top;">
+                            <div style="font-size:18px;line-height:1.25;font-weight:700;color:#2c2c2c;">{{ course.course_name }}</div>
+                            <div class="preview-muted" style="margin-top:8px;font-size:13px;line-height:1.45;color:#666666;">{{ course.meta_line }}</div>
+                          </td>
+                          <td width="88" style="vertical-align:top;text-align:right;">
+                            <div class="{{ course.score_class }}" style="display:inline-block;min-width:74px;padding:10px 8px;border:2px solid;font-size:18px;line-height:1.1;font-weight:700;text-align:center;">{{ course.score }}</div>
+                          </td>
+                        </tr>
+                      </table>
+                      {% if course.info_rows %}
+                      <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="margin:14px 0 0;border-collapse:collapse;background-color:#fafafa;border-left:5px solid #2c2c2c;">
+                        {% for row in course.info_rows %}
+                        <tr>
+                          {% for field in row %}
+                          <td width="{{ field.width }}" class="{{ field.border_class }}" style="padding:16px 24px 14px 24px;vertical-align:top;">
+                            <div class="preview-muted" style="font-size:11px;line-height:1.3;color:#666666;">{{ field.label }}</div>
+                            <div style="margin-top:6px;font-size:14px;line-height:1.25;color:#2c2c2c;font-weight:700;">{{ field.value }}</div>
+                          </td>
+                          {% endfor %}
+                        </tr>
+                        {% endfor %}
+                      </table>
+                      {% endif %}
+                      <div style="margin:10px 0 0;border-top:1px dotted #c6c6c6;"></div>
+                      {% if course.detail_rows %}
+                      <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="margin:12px 0 0;border-collapse:collapse;border:1px solid #d9d9d9;background-color:#ffffff;border-radius:6px;">
+                        <tr>
+                          <td style="padding:22px 28px 24px;">
+                            <div style="font-size:18px;line-height:1.25;font-weight:700;color:#2c2c2c;">成绩构成</div>
+                            <div style="margin:12px 0 0;border-top:1px solid #e3e3e3;"></div>
+                            <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="margin:12px 0 0;border-collapse:collapse;">
+                              {% for row in course.detail_rows %}
+                              <tr>
+                                <td style="padding:10px 0;border-bottom:1px solid #e8e8e8;font-size:14px;line-height:1.35;color:#2c2c2c;">{{ row.name }}</td>
+                                <td class="preview-muted" style="padding:10px 0;border-bottom:1px solid #e8e8e8;font-size:14px;line-height:1.35;color:#666666;text-align:right;">{{ row.score }} ({{ row.percentage }})</td>
+                              </tr>
+                              {% endfor %}
+                              <tr>
+                                <td style="padding:14px 0 0;font-size:16px;line-height:1.35;color:#2c2c2c;font-weight:700;">总评</td>
+                                <td style="padding:14px 0 0;font-size:16px;line-height:1.35;color:#2c2c2c;font-weight:700;text-align:right;">{{ course.score }}</td>
+                              </tr>
+                            </table>
+                          </td>
+                        </tr>
+                      </table>
+                      {% endif %}
+                    </td>
+                  </tr>
+                </table>
+                {% endfor %}
+
+                <div style="padding:18px 0 0;font-size:13px;line-height:1.6;color:#666666;">
+                  此报告基于当前查询结果生成。
+                  {% if omitted_courses %}
+                  <div style="margin-top:12px;font-size:13px;line-height:1.6;color:#666666;">总学分未计入：{{ omitted_courses }}</div>
+                  {% endif %}
+                </div>
+              </td>
+            </tr>
+          </table>
+        </td>
+      </tr>
+    </table>
+  </div>
+</body>
+</html>
