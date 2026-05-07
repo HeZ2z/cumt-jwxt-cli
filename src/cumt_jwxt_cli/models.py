@@ -67,6 +67,7 @@ class NotifyConfig:
     password: str
     sender: str
     recipients: tuple[str, ...]
+    sender_name: str = ""
 
 
 @dataclass(frozen=True)
