@@ -363,6 +363,60 @@ def test_run_grade_query_skips_details_when_no_changes(tmp_path) -> None:
     assert result.details == ()
 
 
+def test_run_grade_query_fetches_details_for_saved_report_without_changes(
+    tmp_path,
+) -> None:
+    config = _app_config(tmp_path / "config.local.json")
+    config = AppConfig(
+        config_path=config.config_path,
+        cumt=config.cumt,
+        query=config.query,
+        http=config.http,
+        grades=config.grades,
+        captcha=config.captcha,
+        notify=config.notify,
+        logging=config.logging,
+        output=OutputConfig(save_json=False, save_report=True, output_dir=""),
+    )
+    client = _QueryClient(
+        {
+            "items": [
+                {
+                    "kch": "A001",
+                    "kcmc": "高等数学",
+                    "cj": "95",
+                    "jxb_id": "JXB-1",
+                }
+            ]
+        },
+        detail_html="""
+        <span class="red2">高等数学</span>
+        <table id="subtab">
+          <tbody><tr><td>期末</td><td>100%</td><td>95</td></tr></tbody>
+        </table>
+        """,
+    )
+
+    result = run_grade_query(
+        config,
+        client,
+        previous_state=_state((_entry("A001", "高等数学", "95"),)),
+        force_email=False,
+        now_factory=lambda: __import__("datetime").datetime.fromisoformat(
+            "2026-05-07T12:00:00+08:00"
+        ),
+    )
+
+    detail_posts = [
+        post for post in client.posts if post[0].endswith("cjcx_cxCjxqGjh.html")
+    ]
+    assert len(detail_posts) == 1
+    assert result.details[0].course_code == "A001"
+    assert "成绩构成" in (tmp_path / "output" / "grade_report.html").read_text(
+        encoding="utf-8"
+    )
+
+
 def test_run_grade_query_skips_details_when_disabled(tmp_path) -> None:
     config = _app_config(tmp_path / "config.local.json")
     config = AppConfig(
