@@ -15,8 +15,10 @@ _REQUIRED_FIELDS = {
 _OPTIONAL_FIELDS = {
     "xf": "credit",
     "jd": "grade_point",
+    "xfjd": "credit_grade_point",
     "kcxzmc": "course_type",
     "khfsmc": "exam_type",
+    "jsxm": "teacher_name",
     "jxb_id": "teaching_class_id",
 }
 

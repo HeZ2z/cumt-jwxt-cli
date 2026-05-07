@@ -16,8 +16,10 @@ def test_parse_grade_list_reads_course_grades() -> None:
                 "cj": " 95 ",
                 "xf": " 4.0 ",
                 "jd": " 4.5 ",
+                "xfjd": " 18.0 ",
                 "kcxzmc": " 必修 ",
                 "khfsmc": " 考试 ",
+                "jsxm": " 张老师 ",
                 "jxb_id": " JXB-1 ",
             }
         ]
@@ -30,8 +32,10 @@ def test_parse_grade_list_reads_course_grades() -> None:
             score="95",
             credit="4.0",
             grade_point="4.5",
+            credit_grade_point="18.0",
             course_type="必修",
             exam_type="考试",
+            teacher_name="张老师",
             teaching_class_id="JXB-1",
         )
     ]
@@ -100,7 +104,9 @@ def test_parse_grade_list_converts_blank_optional_fields_to_none() -> None:
                     "cj": "90",
                     "xf": " ",
                     "jd": "",
+                    "xfjd": " ",
                     "kcxzmc": "任选",
+                    "jsxm": " ",
                 }
             ]
         }
