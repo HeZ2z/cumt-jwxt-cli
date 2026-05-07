@@ -11,7 +11,10 @@ def test_sensitive_data_filter_redacts_known_secret_patterns() -> None:
         level=logging.INFO,
         pathname=__file__,
         lineno=1,
-        msg="password=secret api_key=abc JSESSIONID=session route=node",
+        msg=(
+            "password=secret api_key=abc JSESSIONID=session route=node "
+            "Cookie: JSESSIONID=session; route=node"
+        ),
         args=(),
         exc_info=None,
     )
@@ -22,6 +25,7 @@ def test_sensitive_data_filter_redacts_known_secret_patterns() -> None:
     assert "abc" not in record.msg
     assert "session" not in record.msg
     assert "node" not in record.msg
+    assert "Cookie: ***" in record.msg
     assert "***" in record.msg
 
 

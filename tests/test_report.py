@@ -1,7 +1,13 @@
 """Grade report generation tests."""
 
 from cumt_jwxt_cli.grades.report import build_html_report, build_text_summary
-from cumt_jwxt_cli.models import CourseGrade, GradeChange, GradeSnapshotEntry
+from cumt_jwxt_cli.models import (
+    CourseGrade,
+    GradeChange,
+    GradeDetail,
+    GradeDetailComponent,
+    GradeSnapshotEntry,
+)
 
 
 def _grade(
@@ -100,3 +106,31 @@ def test_build_html_report_escapes_external_text() -> None:
     assert "CUMT grades 2024-12" in html
     assert "A001" in html
     assert "95" in html
+
+
+def test_build_html_report_includes_escaped_grade_details() -> None:
+    html = build_html_report(
+        grades=(_grade("A001", "高等数学", "95"),),
+        changes=(),
+        details=(
+            GradeDetail(
+                course_code="A001",
+                course_name="<b>高等数学</b>",
+                components=(
+                    GradeDetailComponent(
+                        name="<script>平时</script>",
+                        percentage="30%",
+                        score="90",
+                    ),
+                ),
+            ),
+        ),
+        year="2024",
+        semester="12",
+        queried_at="2026-05-07T12:00:00+08:00",
+    )
+
+    assert "Grade details" in html
+    assert "&lt;b&gt;高等数学&lt;/b&gt;" in html
+    assert "&lt;script&gt;平时&lt;/script&gt;" in html
+    assert "<script>" not in html

@@ -20,7 +20,6 @@ dist/
 
 # Local system files
 .DS_Store
-.claude/settings.local.json
 
 # Local config and runtime state
 config.local.json
@@ -28,9 +27,13 @@ config.json
 state.json
 *.log
 
+# Editor and agent runtime dirs
+.vscode/
+.claude/
+.omx/
+
 # Runtime artifacts
 logs/
 output/
 temp/
 data/
-.omx/

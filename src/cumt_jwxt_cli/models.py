@@ -67,6 +67,7 @@ class NotifyConfig:
     password: str
     sender: str
     recipients: tuple[str, ...]
+    sender_name: str = ""
 
 
 @dataclass(frozen=True)
@@ -133,10 +134,30 @@ class GradeChange:
 
 
 @dataclass(frozen=True)
+class GradeDetailComponent:
+    """Parsed score component from a course detail page."""
+
+    name: str
+    percentage: str
+    score: str
+
+
+@dataclass(frozen=True)
+class GradeDetail:
+    """Parsed grade detail for one course."""
+
+    course_code: str
+    course_name: str
+    components: tuple[GradeDetailComponent, ...]
+
+
+@dataclass(frozen=True)
 class RuntimeState:
     """Minimal runtime state safe to persist between runs."""
 
     schema_version: int
+    session_cookies: dict[str, str]
+    session_updated_at: str | None
     last_grade_snapshot: tuple[GradeSnapshotEntry, ...]
     last_successful_query_at: str | None
     last_notified_at: str | None
@@ -149,4 +170,5 @@ class GradeQueryResult:
     grades: tuple[CourseGrade, ...]
     snapshot: tuple[GradeSnapshotEntry, ...]
     changes: tuple[GradeChange, ...]
+    details: tuple[GradeDetail, ...]
     state: RuntimeState

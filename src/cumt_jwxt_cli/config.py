@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+import sys
 from argparse import Namespace
 from pathlib import Path
 from typing import Any
@@ -24,13 +25,25 @@ from cumt_jwxt_cli.models import (
 
 _ENV_PREFIX = "CUMT_JWXT_"
 _DEFAULT_CONFIG_NAMES = ("config.local.json", "config.json")
+_PROMPT_FIELDS = (
+    ("cumt", "username"),
+    ("cumt", "password"),
+    ("query", "year"),
+    ("query", "semester"),
+    ("captcha", "openai_compatible", "base_url"),
+    ("captcha", "openai_compatible", "api_key"),
+    ("captcha", "openai_compatible", "model"),
+)
 
 
 def load_app_config(args: Namespace) -> AppConfig:
     """Load app configuration from file, environment, and CLI overrides."""
 
     config_path = resolve_config_path(args.config)
-    raw_config = _read_config_file(config_path)
+    raw_config = _read_config_file(
+        config_path,
+        allow_interactive=not bool(getattr(args, "no_interactive", False)),
+    )
 
     cumt_config = CUMTConfig(
         username=_get_string(
@@ -138,6 +151,11 @@ def load_app_config(args: Namespace) -> AppConfig:
             env_name=f"{_ENV_PREFIX}SMTP_SENDER",
             default="",
         ),
+        sender_name=_get_string(
+            raw_config,
+            ("notify", "sender_name"),
+            default="",
+        ),
         recipients=tuple(_get_string_list(raw_config, ("notify", "recipients"))),
     )
     logging_config = LoggingConfig(
@@ -184,8 +202,14 @@ def resolve_config_path(config_arg: str | None) -> Path:
     return (Path.cwd() / _DEFAULT_CONFIG_NAMES[0]).resolve()
 
 
-def _read_config_file(config_path: Path) -> dict[str, Any]:
+def _read_config_file(
+    config_path: Path,
+    *,
+    allow_interactive: bool,
+) -> dict[str, Any]:
     if not config_path.is_file():
+        if allow_interactive and sys.stdin.isatty():
+            return _create_interactive_config(config_path)
         raise ConfigError(
             f"Configuration file not found: {config_path}. "
             "Create config.local.json from config.example.json or pass --config."
@@ -203,7 +227,94 @@ def _read_config_file(config_path: Path) -> dict[str, Any]:
 
     if not isinstance(data, dict):
         raise ConfigError("Configuration root must be a JSON object.")
+    if allow_interactive and sys.stdin.isatty():
+        data = _complete_interactive_config(config_path, data)
     return data
+
+
+def _create_interactive_config(config_path: Path) -> dict[str, Any]:
+    template = _read_config_template()
+    completed = _complete_interactive_config(config_path, template)
+    _write_config_file(config_path, completed)
+    return completed
+
+
+def _complete_interactive_config(
+    config_path: Path,
+    raw_config: dict[str, Any],
+) -> dict[str, Any]:
+    completed = json.loads(json.dumps(raw_config))
+    changed = False
+    for path in _PROMPT_FIELDS:
+        if _get_nested(completed, path):
+            continue
+        env_name = _env_name_for_path(path)
+        if env_name is not None and os.getenv(env_name):
+            continue
+        value = input(f"{'.'.join(path)}: ").strip()
+        if value:
+            _set_nested(completed, path, value)
+            changed = True
+    if changed:
+        _write_config_file(config_path, completed)
+    return completed
+
+
+def _read_config_template() -> dict[str, Any]:
+    template_path = Path(__file__).resolve().parents[3] / "config.example.json"
+    if not template_path.is_file():
+        return {}
+    try:
+        with template_path.open("r", encoding="utf-8") as file:
+            data = json.load(file)
+    except (json.JSONDecodeError, OSError):
+        return {}
+    return data if isinstance(data, dict) else {}
+
+
+def _write_config_file(config_path: Path, data: dict[str, Any]) -> None:
+    try:
+        config_path.parent.mkdir(parents=True, exist_ok=True)
+        config_path.write_text(
+            json.dumps(data, ensure_ascii=False, indent=2) + "\n",
+            encoding="utf-8",
+        )
+    except OSError as exc:
+        raise ConfigError(f"Unable to write configuration file: {config_path}") from exc
+
+
+def _set_nested(raw_config: dict[str, Any], path: tuple[str, ...], value: str) -> None:
+    current: dict[str, Any] = raw_config
+    for key in path[:-1]:
+        child = current.get(key)
+        if not isinstance(child, dict):
+            child = {}
+            current[key] = child
+        current = child
+    current[path[-1]] = value
+
+
+def _env_name_for_path(path: tuple[str, ...]) -> str | None:
+    env_names = {
+        ("cumt", "username"): f"{_ENV_PREFIX}USERNAME",
+        ("cumt", "password"): f"{_ENV_PREFIX}PASSWORD",
+        (
+            "captcha",
+            "openai_compatible",
+            "base_url",
+        ): f"{_ENV_PREFIX}CAPTCHA_OPENAI_COMPATIBLE_BASE_URL",
+        (
+            "captcha",
+            "openai_compatible",
+            "api_key",
+        ): f"{_ENV_PREFIX}CAPTCHA_OPENAI_COMPATIBLE_API_KEY",
+        (
+            "captcha",
+            "openai_compatible",
+            "model",
+        ): f"{_ENV_PREFIX}CAPTCHA_OPENAI_COMPATIBLE_MODEL",
+    }
+    return env_names.get(path)
 
 
 def _get_nested(raw_config: dict[str, Any], path: tuple[str, ...]) -> Any:

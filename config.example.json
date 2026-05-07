@@ -4,8 +4,8 @@
     "password": ""
   },
   "query": {
-    "year": "2024",
-    "semester": "12"
+    "year": "2026",
+    "semester": "3"
   },
   "http": {
     "timeout_seconds": 30,
@@ -32,6 +32,7 @@
     "username": "",
     "password": "",
     "sender": "",
+    "sender_name": "cumt-jwxt-cli",
     "recipients": []
   },
   "logging": {

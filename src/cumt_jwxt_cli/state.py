@@ -10,8 +10,16 @@ from typing import Any
 from cumt_jwxt_cli.errors import StateError
 from cumt_jwxt_cli.models import AppConfig, GradeSnapshotEntry, RuntimeState
 
-_SCHEMA_VERSION = 1
+_SCHEMA_VERSION = 2
 _ALLOWED_KEYS = {
+    "schema_version",
+    "session_cookies",
+    "session_updated_at",
+    "last_grade_snapshot",
+    "last_successful_query_at",
+    "last_notified_at",
+}
+_V1_ALLOWED_KEYS = {
     "schema_version",
     "last_grade_snapshot",
     "last_successful_query_at",
@@ -26,6 +34,8 @@ def load_runtime_state(config: AppConfig) -> RuntimeState:
     if not state_path.is_file():
         return RuntimeState(
             schema_version=_SCHEMA_VERSION,
+            session_cookies={},
+            session_updated_at=None,
             last_grade_snapshot=(),
             last_successful_query_at=None,
             last_notified_at=None,
@@ -66,17 +76,30 @@ def _state_path(config: AppConfig) -> Path:
 def _deserialize_runtime_state(payload: Any) -> RuntimeState:
     if not isinstance(payload, dict):
         raise StateError("State file root must be a JSON object.")
-    if set(payload) != _ALLOWED_KEYS:
-        raise StateError("State file must contain only the supported top-level keys.")
 
     schema_version = _validate_schema_version(payload["schema_version"])
+    allowed_keys = _V1_ALLOWED_KEYS if schema_version == 1 else _ALLOWED_KEYS
+    if set(payload) != allowed_keys:
+        raise StateError("State file must contain only the supported top-level keys.")
 
     snapshot_payload = payload["last_grade_snapshot"]
     if not isinstance(snapshot_payload, list):
         raise StateError("State field last_grade_snapshot must be a list.")
 
     return RuntimeState(
-        schema_version=schema_version,
+        schema_version=_SCHEMA_VERSION,
+        session_cookies=(
+            {}
+            if schema_version == 1
+            else _deserialize_session_cookies(payload["session_cookies"])
+        ),
+        session_updated_at=(
+            None
+            if schema_version == 1
+            else _optional_iso_string(
+                payload["session_updated_at"], "session_updated_at"
+            )
+        ),
         last_grade_snapshot=tuple(
             _deserialize_snapshot_entry(entry, index)
             for index, entry in enumerate(snapshot_payload)
@@ -93,11 +116,25 @@ def _deserialize_runtime_state(payload: Any) -> RuntimeState:
 def _validate_schema_version(value: Any) -> int:
     if isinstance(value, bool) or not isinstance(value, int):
         raise StateError("State field schema_version must be an integer.")
-    if value != _SCHEMA_VERSION:
+    if value not in {1, _SCHEMA_VERSION}:
         raise StateError(
-            f"Unsupported state schema_version {value}; expected {_SCHEMA_VERSION}."
+            "Unsupported state schema_version "
+            f"{value}; expected 1 or {_SCHEMA_VERSION}."
         )
     return value
+
+
+def _deserialize_session_cookies(payload: Any) -> dict[str, str]:
+    if not isinstance(payload, dict):
+        raise StateError("State field session_cookies must be an object.")
+    cookies: dict[str, str] = {}
+    for key, value in payload.items():
+        if not isinstance(key, str) or not key.strip():
+            raise StateError("State session cookie names must be non-blank strings.")
+        if not isinstance(value, str):
+            raise StateError("State session cookie values must be strings.")
+        cookies[key.strip()] = value
+    return cookies
 
 
 def _deserialize_snapshot_entry(payload: Any, index: int) -> GradeSnapshotEntry:
@@ -155,6 +192,9 @@ def _optional_iso_string(value: Any, field_name: str) -> str | None:
 
 def _serialize_runtime_state(state: RuntimeState) -> dict[str, object]:
     _validate_schema_version(state.schema_version)
+    session_updated_at = _optional_iso_string(
+        state.session_updated_at, "session_updated_at"
+    )
     last_successful_query_at = _optional_iso_string(
         state.last_successful_query_at, "last_successful_query_at"
     )
@@ -162,6 +202,8 @@ def _serialize_runtime_state(state: RuntimeState) -> dict[str, object]:
 
     return {
         "schema_version": _SCHEMA_VERSION,
+        "session_cookies": _deserialize_session_cookies(state.session_cookies),
+        "session_updated_at": session_updated_at,
         "last_grade_snapshot": [
             {
                 "course_code": entry.course_code,

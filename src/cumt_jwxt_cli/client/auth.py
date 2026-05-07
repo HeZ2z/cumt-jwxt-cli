@@ -33,6 +33,10 @@ def login(
     """Log in to JWXT and return a serializable cookie snapshot when available."""
 
     timestamp_ms = int(time.time() * 1000)
+    clear_cookies = getattr(client, "clear_cookies", None)
+    if callable(clear_cookies):
+        clear_cookies()
+
     login_response = client.get(LOGIN_PATH)
     csrf_token = extract_csrf_token(login_response.text)
 
