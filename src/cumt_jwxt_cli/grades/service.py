@@ -101,7 +101,7 @@ def run_grade_query(
         config,
         client,
         result,
-        force=force_email,
+        force=force_email or config.output.save_report,
     )
 
     text_summary = build_text_summary(
