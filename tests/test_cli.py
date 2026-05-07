@@ -1,7 +1,11 @@
 """CLI parser tests."""
 
 import json
+from types import SimpleNamespace
 
+import pytest
+
+import cumt_jwxt_cli.cli as cli_module
 from cumt_jwxt_cli.cli import build_parser, main
 from cumt_jwxt_cli.errors import ExitCode
 
@@ -29,6 +33,7 @@ def test_grades_query_parses_key_arguments() -> None:
             "--semester",
             "3",
             "--force-email",
+            "--no-proxy",
             "--no-interactive",
             "--save-json",
             "--save-report",
@@ -42,6 +47,7 @@ def test_grades_query_parses_key_arguments() -> None:
     assert args.year == "2025"
     assert args.semester == "3"
     assert args.force_email is True
+    assert args.no_proxy is True
     assert args.no_interactive is True
     assert args.save_json is True
     assert args.save_report is True
@@ -71,7 +77,7 @@ def test_main_returns_config_error_for_missing_config(capsys, tmp_path) -> None:
     assert "Configuration file not found" in captured.err
 
 
-def test_main_returns_non_zero_for_unimplemented_grades_query(capsys, tmp_path) -> None:
+def test_main_runs_grades_query_workflow(capsys, tmp_path, monkeypatch) -> None:
     config_path = tmp_path / "config.local.json"
     config_path.write_text(
         json.dumps(
@@ -83,12 +89,206 @@ def test_main_returns_non_zero_for_unimplemented_grades_query(capsys, tmp_path) 
         encoding="utf-8",
     )
 
-    exit_code = main(["grades", "query", "--config", str(config_path), "--verbose"])
+    class FakeClient:
+        def __init__(self, **kwargs: object) -> None:
+            self.kwargs = kwargs
+
+        def __enter__(self) -> "FakeClient":
+            return self
+
+        def __exit__(self, *args: object) -> None:
+            return None
+
+        def check_reachable(self) -> None:
+            return None
+
+    monkeypatch.setattr(cli_module, "configure_logging", lambda **kwargs: None)
+    monkeypatch.setattr(cli_module, "JWXTClient", FakeClient)
+    monkeypatch.setattr(
+        cli_module,
+        "login",
+        lambda config, client, recognize_captcha: {},
+    )
+    monkeypatch.setattr(
+        cli_module,
+        "run_grade_query",
+        lambda config, client, force_email: SimpleNamespace(
+            grades=(),
+            changes=(),
+            state=SimpleNamespace(last_successful_query_at="2026-05-07T12:00:00+08:00"),
+        ),
+    )
+
+    exit_code = main(["grades", "query", "--config", str(config_path)])
 
     captured = capsys.readouterr()
 
-    assert exit_code == int(ExitCode.UNKNOWN)
-    assert captured.out == ""
-    assert "grades query is not implemented yet." in captured.err
-    assert "Loaded configuration from" in captured.err
-    assert "2024-12" in captured.err
+    assert exit_code == int(ExitCode.OK)
+    assert "CUMT grades 2024-12" in captured.out
+    assert captured.err == ""
+
+
+def test_main_uses_proxy_by_default(capsys, tmp_path, monkeypatch) -> None:
+    config_path = tmp_path / "config.local.json"
+    config_path.write_text(
+        json.dumps(
+            {
+                "cumt": {"username": "student", "password": "secret"},
+                "query": {"year": "2024", "semester": "12"},
+            }
+        ),
+        encoding="utf-8",
+    )
+    created_clients: list[dict[str, object]] = []
+
+    class FakeClient:
+        def __init__(self, **kwargs: object) -> None:
+            created_clients.append(kwargs)
+
+        def __enter__(self) -> "FakeClient":
+            return self
+
+        def __exit__(self, *args: object) -> None:
+            return None
+
+        def check_reachable(self) -> None:
+            return None
+
+    monkeypatch.setattr(cli_module, "configure_logging", lambda **kwargs: None)
+    monkeypatch.setattr(cli_module, "JWXTClient", FakeClient)
+    monkeypatch.setattr(
+        cli_module,
+        "login",
+        lambda config, client, recognize_captcha: {},
+    )
+    monkeypatch.setattr(
+        cli_module,
+        "run_grade_query",
+        lambda config, client, force_email: SimpleNamespace(
+            grades=(),
+            changes=(),
+            state=SimpleNamespace(last_successful_query_at="2026-05-07T12:00:00+08:00"),
+        ),
+    )
+
+    exit_code = main(["grades", "query", "--config", str(config_path)])
+    captured = capsys.readouterr()
+
+    assert exit_code == int(ExitCode.OK)
+    assert captured.err == ""
+    assert created_clients[0]["trust_env"] is True
+
+
+def test_main_disables_proxy_when_no_proxy_flag_is_set(
+    capsys,
+    tmp_path,
+    monkeypatch,
+) -> None:
+    config_path = tmp_path / "config.local.json"
+    config_path.write_text(
+        json.dumps(
+            {
+                "cumt": {"username": "student", "password": "secret"},
+                "query": {"year": "2024", "semester": "12"},
+            }
+        ),
+        encoding="utf-8",
+    )
+    created_clients: list[dict[str, object]] = []
+
+    class FakeClient:
+        def __init__(self, **kwargs: object) -> None:
+            created_clients.append(kwargs)
+
+        def __enter__(self) -> "FakeClient":
+            return self
+
+        def __exit__(self, *args: object) -> None:
+            return None
+
+        def check_reachable(self) -> None:
+            return None
+
+    monkeypatch.setattr(cli_module, "configure_logging", lambda **kwargs: None)
+    monkeypatch.setattr(cli_module, "JWXTClient", FakeClient)
+    monkeypatch.setattr(
+        cli_module,
+        "login",
+        lambda config, client, recognize_captcha: {},
+    )
+    monkeypatch.setattr(
+        cli_module,
+        "run_grade_query",
+        lambda config, client, force_email: SimpleNamespace(
+            grades=(),
+            changes=(),
+            state=SimpleNamespace(last_successful_query_at="2026-05-07T12:00:00+08:00"),
+        ),
+    )
+
+    exit_code = main(["grades", "query", "--config", str(config_path), "--no-proxy"])
+    captured = capsys.readouterr()
+
+    assert exit_code == int(ExitCode.OK)
+    assert captured.err == ""
+    assert created_clients[0]["trust_env"] is False
+
+
+@pytest.mark.parametrize(
+    ("raised", "expected_code"),
+    [
+        (cli_module.AuthError("auth"), ExitCode.AUTH_ERROR),
+        (cli_module.QueryError("query"), ExitCode.QUERY_ERROR),
+        (cli_module.ParseError("parse"), ExitCode.PARSE_ERROR),
+        (cli_module.NotifyError("notify"), ExitCode.NOTIFY_ERROR),
+    ],
+)
+def test_main_maps_runtime_errors_to_exit_codes(
+    capsys,
+    tmp_path,
+    monkeypatch,
+    raised: Exception,
+    expected_code: ExitCode,
+) -> None:
+    config_path = tmp_path / "config.local.json"
+    config_path.write_text(
+        json.dumps(
+            {
+                "cumt": {"username": "student", "password": "secret"},
+                "query": {"year": "2024", "semester": "12"},
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    class FakeClient:
+        def __init__(self, **kwargs: object) -> None:
+            self.kwargs = kwargs
+
+        def __enter__(self) -> "FakeClient":
+            return self
+
+        def __exit__(self, *args: object) -> None:
+            return None
+
+        def check_reachable(self) -> None:
+            return None
+
+    monkeypatch.setattr(cli_module, "configure_logging", lambda **kwargs: None)
+    monkeypatch.setattr(cli_module, "JWXTClient", FakeClient)
+    monkeypatch.setattr(
+        cli_module,
+        "login",
+        lambda config, client, recognize_captcha: {},
+    )
+    monkeypatch.setattr(
+        cli_module,
+        "run_grade_query",
+        lambda config, client, force_email: (_ for _ in ()).throw(raised),
+    )
+
+    exit_code = main(["grades", "query", "--config", str(config_path)])
+    captured = capsys.readouterr()
+
+    assert exit_code == int(expected_code)
+    assert str(raised) in captured.err

@@ -1,11 +1,21 @@
-"""Pure grade query business orchestration."""
+"""Grade query business orchestration."""
 
-from collections.abc import Iterable
-from datetime import datetime
+from __future__ import annotations
 
-from cumt_jwxt_cli.errors import StateError
+import json
+from collections.abc import Callable, Iterable
+from datetime import UTC, datetime
+from pathlib import Path
+
+from cumt_jwxt_cli.errors import QueryError, StateError
+from cumt_jwxt_cli.grades.parser import parse_grade_list
+from cumt_jwxt_cli.grades.report import build_html_report, build_text_summary
 from cumt_jwxt_cli.grades.snapshot import compare_snapshots, create_grade_snapshot
-from cumt_jwxt_cli.models import CourseGrade, GradeQueryResult, RuntimeState
+from cumt_jwxt_cli.models import AppConfig, CourseGrade, GradeQueryResult, RuntimeState
+from cumt_jwxt_cli.notify.email import send_grade_email
+from cumt_jwxt_cli.state import load_runtime_state, save_runtime_state
+
+GRADE_LIST_PATH = "/cjcx/cjcx_cxXsgrcj.html?doType=query&gnmkdm=N305005"
 
 
 def build_grade_query_result(
@@ -44,6 +54,128 @@ def build_grade_query_result(
         changes=changes,
         state=next_state,
     )
+
+
+def run_grade_query(
+    config: AppConfig,
+    client: object,
+    *,
+    force_email: bool,
+    now_factory: Callable[[], datetime] | None = None,
+    send_email: Callable[..., None] = send_grade_email,
+) -> GradeQueryResult:
+    """Run the minimal grade-list query workflow and persist safe state."""
+
+    previous_state = load_runtime_state(config)
+    queried_at = _now_iso(now_factory)
+    payload = _query_grade_list(config, client)
+    grades = parse_grade_list(payload)
+    result = build_grade_query_result(grades, previous_state, queried_at)
+
+    text_summary = build_text_summary(
+        grades=result.grades,
+        changes=result.changes,
+        year=config.query.year,
+        semester=config.query.semester,
+        queried_at=queried_at,
+    )
+    html_report = build_html_report(
+        grades=result.grades,
+        changes=result.changes,
+        year=config.query.year,
+        semester=config.query.semester,
+        queried_at=queried_at,
+    )
+
+    should_notify = bool(result.changes) or force_email
+    state_to_save = result.state
+    if config.notify.enabled and should_notify:
+        notified_at = _now_iso(now_factory)
+        send_email(
+            config.notify,
+            subject=f"CUMT grades {config.query.year}-{config.query.semester}",
+            text_body=text_summary,
+            html_body=html_report,
+        )
+        result = build_grade_query_result(
+            result.grades,
+            previous_state,
+            queried_at,
+            notified_at=notified_at,
+        )
+        state_to_save = result.state
+
+    save_runtime_state(config, state_to_save)
+    _save_optional_outputs(config, result, text_summary, html_report)
+    return result
+
+
+def _query_grade_list(config: AppConfig, client: object) -> object:
+    try:
+        response = client.post(
+            GRADE_LIST_PATH,
+            data={
+                "xnm": config.query.year,
+                "xqm": config.query.semester,
+                "sfzgcj": "",
+                "kcbj": "",
+                "_search": "false",
+                "queryModel.showCount": "100",
+                "queryModel.currentPage": "1",
+                "queryModel.sortName": "",
+                "queryModel.sortOrder": "asc",
+                "time": "13",
+            },
+        )
+        return response.json()
+    except ValueError as exc:
+        raise QueryError("JWXT grade list response is not valid JSON.") from exc
+    except AttributeError as exc:
+        raise QueryError("JWXT client returned an invalid response object.") from exc
+
+
+def _save_optional_outputs(
+    config: AppConfig,
+    result: GradeQueryResult,
+    text_summary: str,
+    html_report: str,
+) -> None:
+    if not config.output.save_json and not config.output.save_report:
+        return
+
+    output_dir = (
+        Path(config.output.output_dir).expanduser()
+        if config.output.output_dir
+        else config.config_path.parent / "output"
+    )
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    if config.output.save_json:
+        payload = {
+            "grades": [grade.__dict__ for grade in result.grades],
+            "changes": [
+                {
+                    "change_type": change.change_type,
+                    "before": None if change.before is None else change.before.__dict__,
+                    "after": None if change.after is None else change.after.__dict__,
+                }
+                for change in result.changes
+            ],
+            "summary": text_summary,
+        }
+        (output_dir / "grades.json").write_text(
+            json.dumps(payload, ensure_ascii=False, indent=2) + "\n",
+            encoding="utf-8",
+        )
+    if config.output.save_report:
+        (output_dir / "grade_report.html").write_text(html_report, encoding="utf-8")
+
+
+def _now_iso(now_factory: Callable[[], datetime] | None) -> str:
+    now = now_factory() if now_factory is not None else datetime.now(UTC)
+    if now.tzinfo is None:
+        now = now.replace(tzinfo=UTC)
+    return now.isoformat()
 
 
 def _required_iso_timestamp(value: object, field_name: str) -> str:
