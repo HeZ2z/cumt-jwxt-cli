@@ -20,7 +20,7 @@ cumt-jwxt grades query
 
 当前仍未完成的能力：
 
-- 更细的人工验证码 fallback 体验
+- 暂无已知首版主链路缺口
 
 ## 安装与验证
 
@@ -61,19 +61,24 @@ CLI 参数 > CUMT_JWXT_* 环境变量 > config.local.json > 默认值
 3. 优先使用 `state.json` 中保存的受控 session cookie 直接查询成绩
 4. 如果会话失效，再获取登录页和验证码
 5. 通过 OpenAI 兼容接口识别验证码
-6. 登录 JWXT，登录提交后的 302 跳转视为成功登录
-7. 重新查询成绩列表 JSON
-8. 解析成绩并生成快照
-9. 在启用 `grades.include_details_on_change` 且有变更或 `--force-email` 时抓取详细成绩构成
-10. 输出纯文本摘要
-11. 在启用通知且有变更或 `--force-email` 时发送 HTML 邮件
-12. 将 session、快照和查询时间写入配置文件旁的 `state.json`
+6. 如果自动识别失败且当前是交互式终端，临时写出验证码图片并等待人工输入
+7. 登录 JWXT，登录提交后的 302 跳转视为成功登录
+8. 重新查询成绩列表 JSON
+9. 解析成绩并生成快照
+10. 在启用 `grades.include_details_on_change` 且有变更或 `--force-email` 时抓取详细成绩构成
+11. 输出纯文本摘要
+12. 在启用通知且有变更或 `--force-email` 时发送 HTML 邮件
+13. 将 session、快照和查询时间写入配置文件旁的 `state.json`
 
 默认不保存 JSON、HTML 报告或验证码图片。只有显式启用 `--save-json` 或 `--save-report` 时，才会写入输出目录。
 
 `state.json` 会保存受控 session cookie 以便后续运行复用，但不会保存账号、密码、API Key、验证码图片或原始响应正文。
 
+如果手动删除或修改 `state.json` 中的 `JSESSIONID`、`route` 等 cookie，下一次查询会先尝试复用剩余 session；会话失效后会清空旧 cookie、重新登录并刷新 cookie。教务系统可能同时下发同名不同 path 的 cookie，CLI 会保存可序列化的最新同名 cookie 快照，不会因为同名 cookie 冲突而中断。
+
 当前 HTML 报告在拿到详细成绩时会追加成绩构成区块；若单门详情查询或解析失败，会退化为只发送成绩列表，不中断整体查询。
+
+验证码自动识别失败时，交互模式会把验证码图片写入系统临时文件，终端显示临时路径，并在 `captcha.manual_timeout_seconds` 内等待输入。输入完成、超时或失败后会清理临时文件。非交互环境不会等待人工输入，会直接失败，避免定时任务卡住。
 
 ## 保存产物
 
