@@ -19,10 +19,43 @@ cumt-jwxt grades query
 - 在有变更、`--force-email` 或 `--save-report` 时抓取详细成绩构成，并合入 HTML 报告
 - `grades query` 的最小闭环：网络检测 -> 尝试复用 session 查成绩 -> 失效时登录 -> 查询/按需抓详情/报告/通知 -> 更新 `state.json`
 
-## 安装与验证
+## 安装
+
+先克隆仓库：
 
 ```bash
-uv sync
+git clone https://github.com/HeZ2z/cumt-jwxt-cli.git
+cd cumt-jwxt-cli
+```
+
+### 使用 uv（推荐）
+
+```bash
+uv sync --python 3.12
+uv run cumt-jwxt --help
+```
+
+### 使用 pip
+
+如果你不使用 `uv`，也可以直接安装当前项目：
+
+```bash
+python -m venv .venv
+source .venv/bin/activate
+pip install -U pip
+pip install .
+cumt-jwxt --help
+```
+
+如果只是本地开发，也可以使用可编辑安装：
+
+```bash
+pip install -e .
+```
+
+## 验证
+
+```bash
 uv run cumt-jwxt --help
 uv run cumt-jwxt grades --help
 uv run cumt-jwxt grades query --help
@@ -30,6 +63,24 @@ uv run python -m cumt_jwxt_cli --help
 uv run pytest
 uv run ruff check .
 ```
+
+## 配置
+
+复制示例配置后再填写本地敏感信息：
+
+```bash
+cp config.example.json config.local.json
+```
+
+配置优先级：
+
+```text
+CLI 参数 > CUMT_JWXT_* 环境变量 > config.local.json > 默认值
+```
+
+`config.local.json`、`state.json`、`logs/`、`output/`、`temp/` 和 `data/` 均不应提交到仓库。
+
+交互模式下，如果 `config.local.json` 缺失或缺少必要字段，CLI 会按 `config.example.json` 的结构提示补全并写回配置文件；`--no-interactive` 或非 TTY 环境下仍会快速失败。
 
 ## 最小配置示例
 
@@ -72,23 +123,13 @@ uv run ruff check .
 }
 ```
 
-## 配置
+其中：
 
-复制示例配置后再填写本地敏感信息：
-
-```bash
-cp config.example.json config.local.json
-```
-
-配置优先级：
-
-```text
-CLI 参数 > CUMT_JWXT_* 环境变量 > config.local.json > 默认值
-```
-
-`config.local.json`、`state.json`、`logs/`、`output/`、`temp/` 和 `data/` 均不应提交到仓库。
-
-交互模式下，如果 `config.local.json` 缺失或缺少必要字段，CLI 会按 `config.example.json` 的结构提示补全并写回配置文件；`--no-interactive` 或非 TTY 环境下仍会快速失败。
+- `cumt.username` 和 `cumt.password` 是教务系统登录账号密码。
+- `query.year` 和 `query.semester` 是查询的学年学期，例如 `2026` 和 `3` 分别代表 2025-2026 学年第二学期，`query.semester` 的值可以是 `3`（代表第一学期）或 `12`（代表第二学期）或 `16`（代表第三学期，但是我们真的有第三学期吗？），留空为全年查询。
+- `captcha` 配置了验证码识别方式和相关参数，`openai_compatible` 是一个兼容 OpenAI API 的验证码识别实现，要求提供 `base_url`、`api_key` 和 `model`。
+- `notify` 配置了邮件通知相关参数，默认关闭。若开启，需要提供 SMTP 服务器地址、端口、登录凭据、发件人地址和收件人列表。
+- `output` 配置了是否保存 JSON 和 HTML 报告，以及输出目录，默认不开启保存，输出目录默认为配置文件同目录下的 `output/`。
 
 ## 当前行为
 
@@ -161,14 +202,14 @@ uv run cumt-jwxt grades query --save-json --save-report --output-dir ./output
 适合 cron 的最小命令：
 
 ```bash
-cd /path/to/cumt-query-score
+cd /path/to/cumt-jwxt-cli
 uv run cumt-jwxt grades query --config ./config.local.json --no-interactive
 ```
 
 示例 cron：
 
 ```cron
-*/30 * * * * cd /path/to/cumt-query-score && uv run cumt-jwxt grades query --config ./config.local.json --no-interactive
+*/30 * * * * cd /path/to/cumt-jwxt-cli && uv run cumt-jwxt grades query --config ./config.local.json --no-interactive
 ```
 
 建议在定时任务里始终使用：
