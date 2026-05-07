@@ -10,6 +10,27 @@ from cumt_jwxt_cli.cli import build_parser, main
 from cumt_jwxt_cli.errors import ExitCode
 
 
+def _runtime_state(**overrides: object) -> SimpleNamespace:
+    values = {
+        "schema_version": 2,
+        "session_cookies": {},
+        "session_updated_at": None,
+        "last_grade_snapshot": (),
+        "last_successful_query_at": None,
+        "last_notified_at": None,
+    }
+    values.update(overrides)
+    return SimpleNamespace(**values)
+
+
+def _empty_query_result() -> SimpleNamespace:
+    return SimpleNamespace(
+        grades=(),
+        changes=(),
+        state=SimpleNamespace(last_successful_query_at="2026-05-07T12:00:00+08:00"),
+    )
+
+
 def test_build_parser_parses_grades_query() -> None:
     parser = build_parser()
 
@@ -84,6 +105,7 @@ def test_main_runs_grades_query_workflow(capsys, tmp_path, monkeypatch) -> None:
             {
                 "cumt": {"username": "student", "password": "secret"},
                 "query": {"year": "2024", "semester": "12"},
+                "notify": {"enabled": False},
             }
         ),
         encoding="utf-8",
@@ -102,8 +124,16 @@ def test_main_runs_grades_query_workflow(capsys, tmp_path, monkeypatch) -> None:
         def check_reachable(self) -> None:
             return None
 
+        def cookies(self) -> dict[str, str]:
+            return {"JSESSIONID": "new"}
+
     monkeypatch.setattr(cli_module, "configure_logging", lambda **kwargs: None)
     monkeypatch.setattr(cli_module, "JWXTClient", FakeClient)
+    monkeypatch.setattr(
+        cli_module,
+        "load_runtime_state",
+        lambda config: _runtime_state(),
+    )
     monkeypatch.setattr(
         cli_module,
         "login",
@@ -112,11 +142,7 @@ def test_main_runs_grades_query_workflow(capsys, tmp_path, monkeypatch) -> None:
     monkeypatch.setattr(
         cli_module,
         "run_grade_query",
-        lambda config, client, force_email: SimpleNamespace(
-            grades=(),
-            changes=(),
-            state=SimpleNamespace(last_successful_query_at="2026-05-07T12:00:00+08:00"),
-        ),
+        lambda *args, **kwargs: _empty_query_result(),
     )
 
     exit_code = main(["grades", "query", "--config", str(config_path)])
@@ -154,8 +180,16 @@ def test_main_uses_proxy_by_default(capsys, tmp_path, monkeypatch) -> None:
         def check_reachable(self) -> None:
             return None
 
+        def cookies(self) -> dict[str, str]:
+            return {"JSESSIONID": "new"}
+
     monkeypatch.setattr(cli_module, "configure_logging", lambda **kwargs: None)
     monkeypatch.setattr(cli_module, "JWXTClient", FakeClient)
+    monkeypatch.setattr(
+        cli_module,
+        "load_runtime_state",
+        lambda config: _runtime_state(),
+    )
     monkeypatch.setattr(
         cli_module,
         "login",
@@ -164,11 +198,7 @@ def test_main_uses_proxy_by_default(capsys, tmp_path, monkeypatch) -> None:
     monkeypatch.setattr(
         cli_module,
         "run_grade_query",
-        lambda config, client, force_email: SimpleNamespace(
-            grades=(),
-            changes=(),
-            state=SimpleNamespace(last_successful_query_at="2026-05-07T12:00:00+08:00"),
-        ),
+        lambda *args, **kwargs: _empty_query_result(),
     )
 
     exit_code = main(["grades", "query", "--config", str(config_path)])
@@ -209,8 +239,16 @@ def test_main_disables_proxy_when_no_proxy_flag_is_set(
         def check_reachable(self) -> None:
             return None
 
+        def cookies(self) -> dict[str, str]:
+            return {"JSESSIONID": "new"}
+
     monkeypatch.setattr(cli_module, "configure_logging", lambda **kwargs: None)
     monkeypatch.setattr(cli_module, "JWXTClient", FakeClient)
+    monkeypatch.setattr(
+        cli_module,
+        "load_runtime_state",
+        lambda config: _runtime_state(),
+    )
     monkeypatch.setattr(
         cli_module,
         "login",
@@ -219,11 +257,7 @@ def test_main_disables_proxy_when_no_proxy_flag_is_set(
     monkeypatch.setattr(
         cli_module,
         "run_grade_query",
-        lambda config, client, force_email: SimpleNamespace(
-            grades=(),
-            changes=(),
-            state=SimpleNamespace(last_successful_query_at="2026-05-07T12:00:00+08:00"),
-        ),
+        lambda *args, **kwargs: _empty_query_result(),
     )
 
     exit_code = main(["grades", "query", "--config", str(config_path), "--no-proxy"])
@@ -274,21 +308,166 @@ def test_main_maps_runtime_errors_to_exit_codes(
         def check_reachable(self) -> None:
             return None
 
+        def cookies(self) -> dict[str, str]:
+            return {"JSESSIONID": "new"}
+
     monkeypatch.setattr(cli_module, "configure_logging", lambda **kwargs: None)
     monkeypatch.setattr(cli_module, "JWXTClient", FakeClient)
+    monkeypatch.setattr(
+        cli_module,
+        "load_runtime_state",
+        lambda config: _runtime_state(),
+    )
     monkeypatch.setattr(
         cli_module,
         "login",
         lambda config, client, recognize_captcha: {},
     )
-    monkeypatch.setattr(
-        cli_module,
-        "run_grade_query",
-        lambda config, client, force_email: (_ for _ in ()).throw(raised),
-    )
+    def raise_runtime_error(*args: object, **kwargs: object) -> None:
+        raise raised
+
+    monkeypatch.setattr(cli_module, "run_grade_query", raise_runtime_error)
 
     exit_code = main(["grades", "query", "--config", str(config_path)])
     captured = capsys.readouterr()
 
     assert exit_code == int(expected_code)
     assert str(raised) in captured.err
+
+
+def test_main_skips_login_when_saved_session_query_succeeds(
+    capsys,
+    tmp_path,
+    monkeypatch,
+) -> None:
+    config_path = tmp_path / "config.local.json"
+    config_path.write_text(
+        json.dumps(
+            {
+                "cumt": {"username": "student", "password": "secret"},
+                "query": {"year": "2024", "semester": "12"},
+            }
+        ),
+        encoding="utf-8",
+    )
+    login_calls = 0
+
+    class FakeClient:
+        def __init__(self, **kwargs: object) -> None:
+            self.kwargs = kwargs
+
+        def __enter__(self) -> "FakeClient":
+            return self
+
+        def __exit__(self, *args: object) -> None:
+            return None
+
+        def check_reachable(self) -> None:
+            return None
+
+        def cookies(self) -> dict[str, str]:
+            return {"JSESSIONID": "saved"}
+
+    monkeypatch.setattr(cli_module, "configure_logging", lambda **kwargs: None)
+    monkeypatch.setattr(cli_module, "JWXTClient", FakeClient)
+    monkeypatch.setattr(
+        cli_module,
+        "load_runtime_state",
+        lambda config: _runtime_state(
+            session_cookies={"JSESSIONID": "saved"},
+            session_updated_at="2026-05-07T12:00:00+08:00",
+        ),
+    )
+
+    def fake_login(config, client, recognize_captcha) -> None:
+        nonlocal login_calls
+        login_calls += 1
+
+    monkeypatch.setattr(cli_module, "login", fake_login)
+    monkeypatch.setattr(
+        cli_module,
+        "run_grade_query",
+        lambda *args, **kwargs: _empty_query_result(),
+    )
+
+    exit_code = main(["grades", "query", "--config", str(config_path)])
+    captured = capsys.readouterr()
+
+    assert exit_code == int(ExitCode.OK)
+    assert captured.err == ""
+    assert login_calls == 0
+
+
+def test_main_retries_with_login_when_saved_session_looks_expired(
+    capsys,
+    tmp_path,
+    monkeypatch,
+) -> None:
+    config_path = tmp_path / "config.local.json"
+    config_path.write_text(
+        json.dumps(
+            {
+                "cumt": {"username": "student", "password": "secret"},
+                "query": {"year": "2024", "semester": "12"},
+            }
+        ),
+        encoding="utf-8",
+    )
+    login_calls = 0
+    query_calls = 0
+
+    class FakeClient:
+        def __init__(self, **kwargs: object) -> None:
+            self.kwargs = kwargs
+
+        def __enter__(self) -> "FakeClient":
+            return self
+
+        def __exit__(self, *args: object) -> None:
+            return None
+
+        def check_reachable(self) -> None:
+            return None
+
+        def cookies(self) -> dict[str, str]:
+            return {"JSESSIONID": "new"}
+
+    monkeypatch.setattr(cli_module, "configure_logging", lambda **kwargs: None)
+    monkeypatch.setattr(cli_module, "JWXTClient", FakeClient)
+    monkeypatch.setattr(
+        cli_module,
+        "load_runtime_state",
+        lambda config: _runtime_state(
+            session_cookies={"JSESSIONID": "saved"},
+            session_updated_at="2026-05-07T12:00:00+08:00",
+        ),
+    )
+
+    def fake_login(config, client, recognize_captcha) -> None:
+        nonlocal login_calls
+        login_calls += 1
+
+    def fake_run_grade_query(
+        *args: object,
+        **kwargs: object,
+    ):
+        nonlocal query_calls
+        query_calls += 1
+        if query_calls == 1:
+            raise cli_module.QueryError("JWXT grade list request failed with HTTP 901.")
+        return SimpleNamespace(
+            grades=(),
+            changes=(),
+            state=SimpleNamespace(last_successful_query_at="2026-05-07T12:00:00+08:00"),
+        )
+
+    monkeypatch.setattr(cli_module, "login", fake_login)
+    monkeypatch.setattr(cli_module, "run_grade_query", fake_run_grade_query)
+
+    exit_code = main(["grades", "query", "--config", str(config_path)])
+    captured = capsys.readouterr()
+
+    assert exit_code == int(ExitCode.OK)
+    assert captured.err == ""
+    assert login_calls == 1
+    assert query_calls == 2

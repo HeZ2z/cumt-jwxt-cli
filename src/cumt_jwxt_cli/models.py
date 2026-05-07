@@ -137,6 +137,8 @@ class RuntimeState:
     """Minimal runtime state safe to persist between runs."""
 
     schema_version: int
+    session_cookies: dict[str, str]
+    session_updated_at: str | None
     last_grade_snapshot: tuple[GradeSnapshotEntry, ...]
     last_successful_query_at: str | None
     last_notified_at: str | None

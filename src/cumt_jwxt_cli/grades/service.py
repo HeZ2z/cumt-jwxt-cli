@@ -40,6 +40,8 @@ def build_grade_query_result(
 
     next_state = RuntimeState(
         schema_version=previous_state.schema_version,
+        session_cookies=dict(previous_state.session_cookies),
+        session_updated_at=previous_state.session_updated_at,
         last_grade_snapshot=current_snapshot,
         last_successful_query_at=normalized_queried_at,
         last_notified_at=(
@@ -60,17 +62,29 @@ def run_grade_query(
     config: AppConfig,
     client: object,
     *,
+    previous_state: RuntimeState | None = None,
+    session_cookies: dict[str, str] | None = None,
+    session_updated_at: str | None = None,
     force_email: bool,
     now_factory: Callable[[], datetime] | None = None,
     send_email: Callable[..., None] = send_grade_email,
 ) -> GradeQueryResult:
     """Run the minimal grade-list query workflow and persist safe state."""
 
-    previous_state = load_runtime_state(config)
+    if previous_state is None:
+        previous_state = load_runtime_state(config)
     queried_at = _now_iso(now_factory)
     payload = _query_grade_list(config, client)
     grades = parse_grade_list(payload)
-    result = build_grade_query_result(grades, previous_state, queried_at)
+    result = build_grade_query_result(
+        grades,
+        _state_with_session(
+            previous_state,
+            session_cookies=session_cookies,
+            session_updated_at=session_updated_at,
+        ),
+        queried_at,
+    )
 
     text_summary = build_text_summary(
         grades=result.grades,
@@ -99,7 +113,11 @@ def run_grade_query(
         )
         result = build_grade_query_result(
             result.grades,
-            previous_state,
+            _state_with_session(
+                previous_state,
+                session_cookies=session_cookies,
+                session_updated_at=session_updated_at,
+            ),
             queried_at,
             notified_at=notified_at,
         )
@@ -108,6 +126,18 @@ def run_grade_query(
     save_runtime_state(config, state_to_save)
     _save_optional_outputs(config, result, text_summary, html_report)
     return result
+
+
+def is_session_query_failure(exc: QueryError) -> bool:
+    """Return whether a query failure likely indicates an expired login session."""
+
+    message = str(exc).lower()
+    session_markers = (
+        "http 901",
+        "not valid json",
+        "invalid response object",
+    )
+    return any(marker in message for marker in session_markers)
 
 
 def _query_grade_list(config: AppConfig, client: object) -> object:
@@ -127,11 +157,45 @@ def _query_grade_list(config: AppConfig, client: object) -> object:
                 "time": "13",
             },
         )
+        content_type = ""
+        headers = getattr(response, "headers", None)
+        if isinstance(headers, dict):
+            content_type = str(headers.get("content-type", "")).lower()
+        status_code = getattr(response, "status_code", None)
+        if status_code == 901:
+            raise QueryError("JWXT grade list request failed with HTTP 901.")
+        if "text/html" in content_type:
+            raise QueryError(
+                "JWXT grade list response looks like an HTML login page."
+            )
         return response.json()
     except ValueError as exc:
         raise QueryError("JWXT grade list response is not valid JSON.") from exc
     except AttributeError as exc:
         raise QueryError("JWXT client returned an invalid response object.") from exc
+
+
+def _state_with_session(
+    previous_state: RuntimeState,
+    *,
+    session_cookies: dict[str, str] | None,
+    session_updated_at: str | None,
+) -> RuntimeState:
+    cookies = (
+        previous_state.session_cookies if session_cookies is None else session_cookies
+    )
+    return RuntimeState(
+        schema_version=previous_state.schema_version,
+        session_cookies=dict(cookies),
+        session_updated_at=(
+            previous_state.session_updated_at
+            if session_updated_at is None
+            else session_updated_at
+        ),
+        last_grade_snapshot=previous_state.last_grade_snapshot,
+        last_successful_query_at=previous_state.last_successful_query_at,
+        last_notified_at=previous_state.last_notified_at,
+    )
 
 
 def _save_optional_outputs(

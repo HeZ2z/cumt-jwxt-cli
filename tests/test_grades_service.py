@@ -6,7 +6,11 @@ from pathlib import Path
 import pytest
 
 from cumt_jwxt_cli.errors import NotifyError, SnapshotError, StateError
-from cumt_jwxt_cli.grades.service import build_grade_query_result, run_grade_query
+from cumt_jwxt_cli.grades.service import (
+    build_grade_query_result,
+    is_session_query_failure,
+    run_grade_query,
+)
 from cumt_jwxt_cli.models import (
     AppConfig,
     CaptchaConfig,
@@ -38,11 +42,15 @@ def _entry(course_code: str, course_name: str, score: str) -> GradeSnapshotEntry
 def _state(
     snapshot: tuple[GradeSnapshotEntry, ...],
     *,
+    session_cookies: dict[str, str] | None = None,
+    session_updated_at: str | None = None,
     last_successful_query_at: str | None = None,
     last_notified_at: str | None = None,
 ) -> RuntimeState:
     return RuntimeState(
-        schema_version=1,
+        schema_version=2,
+        session_cookies={} if session_cookies is None else session_cookies,
+        session_updated_at=session_updated_at,
         last_grade_snapshot=snapshot,
         last_successful_query_at=last_successful_query_at,
         last_notified_at=last_notified_at,
@@ -130,7 +138,9 @@ def test_build_grade_query_result_creates_snapshot_and_state_from_empty_history(
         ),
     )
     assert result.state == RuntimeState(
-        schema_version=1,
+        schema_version=2,
+        session_cookies={},
+        session_updated_at=None,
         last_grade_snapshot=result.snapshot,
         last_successful_query_at="2026-05-05T12:00:00+08:00",
         last_notified_at="2026-05-05T11:55:00+08:00",
@@ -238,6 +248,8 @@ def test_run_grade_query_saves_state_after_successful_query(tmp_path) -> None:
     result = run_grade_query(
         config,
         client,
+        previous_state=_state((), session_cookies={"JSESSIONID": "existing"}),
+        session_cookies={"JSESSIONID": "existing"},
         force_email=False,
         now_factory=lambda: __import__("datetime").datetime.fromisoformat(
             "2026-05-07T12:00:00+08:00"
@@ -252,6 +264,7 @@ def test_run_grade_query_saves_state_after_successful_query(tmp_path) -> None:
         ),
     )
     state_payload = json.loads((tmp_path / "state.json").read_text(encoding="utf-8"))
+    assert state_payload["session_cookies"] == {"JSESSIONID": "existing"}
     assert state_payload["last_grade_snapshot"] == [
         {"course_code": "A001", "course_name": "高等数学", "score": "95"}
     ]
@@ -270,6 +283,8 @@ def test_run_grade_query_does_not_update_state_when_notify_fails(tmp_path) -> No
         run_grade_query(
             config,
             client,
+            previous_state=_state((), session_cookies={"JSESSIONID": "existing"}),
+            session_cookies={"JSESSIONID": "existing"},
             force_email=False,
             now_factory=lambda: __import__("datetime").datetime.fromisoformat(
                 "2026-05-07T12:00:00+08:00"
@@ -278,3 +293,21 @@ def test_run_grade_query_does_not_update_state_when_notify_fails(tmp_path) -> No
         )
 
     assert not (tmp_path / "state.json").exists()
+
+
+def test_is_session_query_failure_matches_known_session_markers() -> None:
+    assert is_session_query_failure(
+        __import__("cumt_jwxt_cli.errors").errors.QueryError(
+            "JWXT grade list request failed with HTTP 901."
+        )
+    )
+    assert is_session_query_failure(
+        __import__("cumt_jwxt_cli.errors").errors.QueryError(
+            "JWXT grade list response is not valid JSON."
+        )
+    )
+    assert not is_session_query_failure(
+        __import__("cumt_jwxt_cli.errors").errors.QueryError(
+            "JWXT request failed after retry attempts."
+        )
+    )
