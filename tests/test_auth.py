@@ -28,6 +28,7 @@ class _Response:
 class _Client:
     def __init__(self) -> None:
         self.posts: list[tuple[str, dict[str, str]]] = []
+        self.clear_cookie_calls = 0
 
     def get(self, path: str) -> _Response:
         if path.startswith("/xtgl/login_slogin.html"):
@@ -39,6 +40,9 @@ class _Client:
     def post(self, path: str, *, data: dict[str, str]) -> _Response:
         self.posts.append((path, data))
         return _Response(text="首页")
+
+    def clear_cookies(self) -> None:
+        self.clear_cookie_calls += 1
 
 
 def _config() -> AppConfig:
@@ -90,6 +94,7 @@ def test_login_submits_captcha_and_credentials() -> None:
             },
         )
     ]
+    assert client.clear_cookie_calls == 1
 
 
 def test_login_rejects_failed_status() -> None:

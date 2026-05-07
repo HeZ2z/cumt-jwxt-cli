@@ -46,6 +46,42 @@ def test_jwxt_client_accepts_explicit_trust_env_false() -> None:
         assert client.get("/status").json() == {"ok": True}
 
 
+def test_jwxt_client_cookie_snapshot_tolerates_duplicate_cookie_names() -> None:
+    with JWXTClient(
+        timeout_seconds=5,
+        retry_attempts=0,
+        retry_backoff_seconds=0,
+        trust_env=False,
+    ) as client:
+        client._client.cookies.set(  # type: ignore[attr-defined]
+            "JSESSIONID",
+            "old",
+            domain="jwxt.cumt.edu.cn",
+            path="/",
+        )
+        client._client.cookies.set(  # type: ignore[attr-defined]
+            "JSESSIONID",
+            "new",
+            domain="jwxt.cumt.edu.cn",
+            path="/jwglxt",
+        )
+
+        assert client.cookies()["JSESSIONID"] == "new"
+
+
+def test_jwxt_client_can_clear_session_cookies() -> None:
+    with JWXTClient(
+        timeout_seconds=5,
+        retry_attempts=0,
+        retry_backoff_seconds=0,
+        cookies={"JSESSIONID": "old", "route": "node"},
+        trust_env=False,
+    ) as client:
+        client.clear_cookies()
+
+        assert client.cookies() == {}
+
+
 def test_jwxt_client_check_reachable_uses_base_jwxt_path() -> None:
     requests: list[httpx.Request] = []
 

@@ -167,6 +167,7 @@ def _run_grade_query_with_session_reuse(
             recognize_captcha=lambda image, app_config: recognize_captcha(
                 image,
                 app_config.captcha.openai_compatible,
+                manual_timeout_seconds=app_config.captcha.manual_timeout_seconds,
             ),
         )
         return run_grade_query(
@@ -194,6 +195,9 @@ def _run_grade_query_with_session_reuse(
                 recognize_captcha=lambda image, app_config: recognize_captcha(
                     image,
                     app_config.captcha.openai_compatible,
+                    manual_timeout_seconds=(
+                        app_config.captcha.manual_timeout_seconds
+                    ),
                 ),
             )
             return run_grade_query(
