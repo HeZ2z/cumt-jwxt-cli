@@ -133,6 +133,24 @@ class GradeChange:
 
 
 @dataclass(frozen=True)
+class GradeDetailComponent:
+    """Parsed score component from a course detail page."""
+
+    name: str
+    percentage: str
+    score: str
+
+
+@dataclass(frozen=True)
+class GradeDetail:
+    """Parsed grade detail for one course."""
+
+    course_code: str
+    course_name: str
+    components: tuple[GradeDetailComponent, ...]
+
+
+@dataclass(frozen=True)
 class RuntimeState:
     """Minimal runtime state safe to persist between runs."""
 
@@ -151,4 +169,5 @@ class GradeQueryResult:
     grades: tuple[CourseGrade, ...]
     snapshot: tuple[GradeSnapshotEntry, ...]
     changes: tuple[GradeChange, ...]
+    details: tuple[GradeDetail, ...]
     state: RuntimeState
