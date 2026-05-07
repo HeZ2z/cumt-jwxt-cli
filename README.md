@@ -20,7 +20,6 @@ cumt-jwxt grades query
 
 当前仍未完成的能力：
 
-- 交互式配置补全
 - 更完整的公开使用文档和定时任务示例
 - README 的常见故障、免责声明与更完整保存产物说明
 
@@ -52,6 +51,8 @@ CLI 参数 > CUMT_JWXT_* 环境变量 > config.local.json > 默认值
 
 `config.local.json`、`state.json`、`logs/`、`output/`、`temp/` 和 `data/` 均不应提交到仓库。
 
+交互模式下，如果 `config.local.json` 缺失或缺少必要字段，CLI 会按 `config.example.json` 的结构提示补全并写回配置文件；`--no-interactive` 或非 TTY 环境下仍会快速失败。
+
 ## 当前行为
 
 `uv run cumt-jwxt grades query --config ./config.local.json` 目前会执行：
@@ -78,6 +79,20 @@ CLI 参数 > CUMT_JWXT_* 环境变量 > config.local.json > 默认值
 ## 邮件通知
 
 邮件通知默认关闭。配置 `notify.enabled = true` 后，只有检测到成绩变化或显式传入 `--force-email` 时才发送。
+
+`notify.username` 是 SMTP 登录账号，`notify.sender` 是邮件 `From` 地址。多数 SMTP 服务要求两者一致或要求 `sender` 是账号下已验证的别名。`notify.sender_name` 是可选显示名，例如：
+
+```json
+{
+  "notify": {
+    "username": "sender@example.com",
+    "sender": "sender@example.com",
+    "sender_name": "cumt-jwxt-cli"
+  }
+}
+```
+
+配置后收件人看到的发件人会类似 `cumt-jwxt-cli <sender@example.com>`。
 
 SMTP 失败会输出分类后的安全错误信息：
 

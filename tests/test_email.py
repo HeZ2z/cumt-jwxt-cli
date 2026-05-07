@@ -42,6 +42,7 @@ def _config(**overrides: object) -> NotifyConfig:
         "username": "sender-user",
         "password": "sender-password",
         "sender": "sender@example.test",
+        "sender_name": "",
         "recipients": ("a@example.test", "b@example.test"),
     }
     values.update(overrides)
@@ -63,6 +64,22 @@ def test_send_grade_email_sends_html_message() -> None:
     assert smtp.host == "smtp.example.test"
     assert smtp.logged_in == ("sender-user", "sender-password")
     assert len(smtp.messages) == 1
+
+
+def test_send_grade_email_uses_sender_display_name_when_configured() -> None:
+    _SMTP.instances.clear()
+
+    send_grade_email(
+        _config(sender_name="cumt-jwxt-cli"),
+        subject="Grades changed",
+        text_body="plain",
+        html_body="<p>html</p>",
+        smtp_factory=_SMTP,
+    )
+
+    smtp = _SMTP.instances[0]
+    message = smtp.messages[0]
+    assert message["From"] == "cumt-jwxt-cli <sender@example.test>"
 
 
 def test_send_grade_email_skips_disabled_notify() -> None:

@@ -6,6 +6,7 @@ import smtplib
 import socket
 from collections.abc import Callable
 from email.message import EmailMessage
+from email.utils import formataddr
 
 from cumt_jwxt_cli.errors import NotifyError
 from cumt_jwxt_cli.models import NotifyConfig
@@ -28,7 +29,11 @@ def send_grade_email(
 
     message = EmailMessage()
     message["Subject"] = subject
-    message["From"] = config.sender
+    message["From"] = (
+        formataddr((config.sender_name, config.sender))
+        if config.sender_name
+        else config.sender
+    )
     message["To"] = ", ".join(config.recipients)
     message.set_content(text_body)
     message.add_alternative(html_body, subtype="html")
