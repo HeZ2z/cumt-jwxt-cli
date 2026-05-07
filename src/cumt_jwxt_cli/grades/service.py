@@ -3,19 +3,30 @@
 from __future__ import annotations
 
 import json
+import logging
+import time
 from collections.abc import Callable, Iterable
+from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime
 from pathlib import Path
 
-from cumt_jwxt_cli.errors import QueryError, StateError
-from cumt_jwxt_cli.grades.parser import parse_grade_list
+from cumt_jwxt_cli.errors import ParseError, QueryError, StateError
+from cumt_jwxt_cli.grades.parser import parse_grade_detail, parse_grade_list
 from cumt_jwxt_cli.grades.report import build_html_report, build_text_summary
 from cumt_jwxt_cli.grades.snapshot import compare_snapshots, create_grade_snapshot
-from cumt_jwxt_cli.models import AppConfig, CourseGrade, GradeQueryResult, RuntimeState
+from cumt_jwxt_cli.models import (
+    AppConfig,
+    CourseGrade,
+    GradeDetail,
+    GradeQueryResult,
+    RuntimeState,
+)
 from cumt_jwxt_cli.notify.email import send_grade_email
 from cumt_jwxt_cli.state import load_runtime_state, save_runtime_state
 
 GRADE_LIST_PATH = "/cjcx/cjcx_cxXsgrcj.html?doType=query&gnmkdm=N305005"
+GRADE_DETAIL_PATH = "/cjcx/cjcx_cxCjxqGjh.html"
+_LOGGER = logging.getLogger(__name__)
 
 
 def build_grade_query_result(
@@ -54,6 +65,7 @@ def build_grade_query_result(
         grades=grade_records,
         snapshot=current_snapshot,
         changes=changes,
+        details=(),
         state=next_state,
     )
 
@@ -85,6 +97,12 @@ def run_grade_query(
         ),
         queried_at,
     )
+    details = _query_grade_details_if_needed(
+        config,
+        client,
+        result,
+        force=force_email,
+    )
 
     text_summary = build_text_summary(
         grades=result.grades,
@@ -96,10 +114,12 @@ def run_grade_query(
     html_report = build_html_report(
         grades=result.grades,
         changes=result.changes,
+        details=details,
         year=config.query.year,
         semester=config.query.semester,
         queried_at=queried_at,
     )
+    result = _result_with_details(result, details)
 
     should_notify = bool(result.changes) or force_email
     state_to_save = result.state
@@ -121,6 +141,7 @@ def run_grade_query(
             queried_at,
             notified_at=notified_at,
         )
+        result = _result_with_details(result, details)
         state_to_save = result.state
 
     save_runtime_state(config, state_to_save)
@@ -175,6 +196,83 @@ def _query_grade_list(config: AppConfig, client: object) -> object:
         raise QueryError("JWXT client returned an invalid response object.") from exc
 
 
+def _query_grade_details_if_needed(
+    config: AppConfig,
+    client: object,
+    result: GradeQueryResult,
+    *,
+    force: bool,
+) -> tuple[GradeDetail, ...]:
+    if not config.grades.include_details_on_change:
+        return ()
+    if not result.changes and not force:
+        return ()
+
+    grades = tuple(
+        grade
+        for grade in _grades_for_detail_query(result, force=force)
+        if grade.teaching_class_id is not None
+    )
+    if not grades:
+        return ()
+
+    max_workers = max(1, min(config.grades.detail_concurrency, len(grades)))
+    with ThreadPoolExecutor(max_workers=max_workers) as executor:
+        details = executor.map(
+            lambda grade: _query_grade_detail(config, client, grade),
+            grades,
+        )
+    return tuple(detail for detail in details if detail is not None)
+
+
+def _grades_for_detail_query(
+    result: GradeQueryResult,
+    *,
+    force: bool,
+) -> tuple[CourseGrade, ...]:
+    if force:
+        return result.grades
+    changed_keys = {
+        change.after.course_code
+        for change in result.changes
+        if change.after is not None
+    }
+    return tuple(grade for grade in result.grades if grade.course_code in changed_keys)
+
+
+def _query_grade_detail(
+    config: AppConfig,
+    client: object,
+    grade: CourseGrade,
+) -> GradeDetail | None:
+    try:
+        response = client.post(
+            GRADE_DETAIL_PATH,
+            params={
+                "time": str(int(time.time() * 1000)),
+                "gnmkdm": "N305005",
+            },
+            data={
+                "jxb_id": grade.teaching_class_id or "",
+                "xnm": config.query.year,
+                "xqm": config.query.semester,
+                "kcmc": grade.course_name,
+            },
+        )
+        return parse_grade_detail(
+            response.text,
+            course_code=grade.course_code,
+            fallback_course_name=grade.course_name,
+        )
+    except (AttributeError, ParseError, QueryError) as exc:
+        _LOGGER.warning(
+            "Skipping grade detail for course %s after detail query or parse failure.",
+            grade.course_code,
+            exc_info=exc,
+        )
+        return None
+
+
 def _state_with_session(
     previous_state: RuntimeState,
     *,
@@ -195,6 +293,19 @@ def _state_with_session(
         last_grade_snapshot=previous_state.last_grade_snapshot,
         last_successful_query_at=previous_state.last_successful_query_at,
         last_notified_at=previous_state.last_notified_at,
+    )
+
+
+def _result_with_details(
+    result: GradeQueryResult,
+    details: tuple[GradeDetail, ...],
+) -> GradeQueryResult:
+    return GradeQueryResult(
+        grades=result.grades,
+        snapshot=result.snapshot,
+        changes=result.changes,
+        details=details,
+        state=result.state,
     )
 
 
@@ -224,6 +335,16 @@ def _save_optional_outputs(
                     "after": None if change.after is None else change.after.__dict__,
                 }
                 for change in result.changes
+            ],
+            "details": [
+                {
+                    "course_code": detail.course_code,
+                    "course_name": detail.course_name,
+                    "components": [
+                        component.__dict__ for component in detail.components
+                    ],
+                }
+                for detail in result.details
             ],
             "summary": text_summary,
         }

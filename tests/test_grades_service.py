@@ -1,10 +1,12 @@
 """Grade service orchestration tests."""
 
 import json
+from collections.abc import Callable, Iterable
 from pathlib import Path
 
 import pytest
 
+import cumt_jwxt_cli.grades.service as service_module
 from cumt_jwxt_cli.errors import NotifyError, SnapshotError, StateError
 from cumt_jwxt_cli.grades.service import (
     build_grade_query_result,
@@ -88,20 +90,30 @@ def _app_config(config_path: Path, *, notify_enabled: bool = False) -> AppConfig
 
 
 class _QueryResponse:
-    def __init__(self, payload: object) -> None:
+    def __init__(self, payload: object, *, text: str = "") -> None:
         self._payload = payload
+        self.text = text
 
     def json(self) -> object:
         return self._payload
 
 
 class _QueryClient:
-    def __init__(self, payload: object) -> None:
+    def __init__(self, payload: object, *, detail_html: str = "") -> None:
         self.payload = payload
-        self.posts: list[tuple[str, dict[str, str]]] = []
+        self.detail_html = detail_html
+        self.posts: list[tuple[str, dict[str, str], dict[str, str]]] = []
 
-    def post(self, path: str, *, data: dict[str, str]) -> _QueryResponse:
-        self.posts.append((path, data))
+    def post(
+        self,
+        path: str,
+        *,
+        data: dict[str, str],
+        params: dict[str, str] | None = None,
+    ) -> _QueryResponse:
+        self.posts.append((path, data, params or {}))
+        if path.endswith("cjcx_cxCjxqGjh.html"):
+            return _QueryResponse({}, text=self.detail_html)
         return _QueryResponse(self.payload)
 
 
@@ -145,6 +157,7 @@ def test_build_grade_query_result_creates_snapshot_and_state_from_empty_history(
         last_successful_query_at="2026-05-05T12:00:00+08:00",
         last_notified_at="2026-05-05T11:55:00+08:00",
     )
+    assert result.details == ()
 
 
 def test_build_grade_query_result_preserves_compare_snapshots_change_order() -> None:
@@ -268,6 +281,275 @@ def test_run_grade_query_saves_state_after_successful_query(tmp_path) -> None:
     assert state_payload["last_grade_snapshot"] == [
         {"course_code": "A001", "course_name": "高等数学", "score": "95"}
     ]
+
+
+def test_run_grade_query_fetches_details_for_changed_courses(tmp_path) -> None:
+    config = _app_config(tmp_path / "config.local.json")
+    client = _QueryClient(
+        {
+            "items": [
+                {
+                    "kch": "A001",
+                    "kcmc": "高等数学",
+                    "cj": "95",
+                    "jxb_id": "JXB-1",
+                },
+                {
+                    "kch": "B002",
+                    "kcmc": "大学英语",
+                    "cj": "88",
+                    "jxb_id": "JXB-2",
+                },
+            ]
+        },
+        detail_html="""
+        <span class="red2">高等数学</span>
+        <table id="subtab">
+          <tbody><tr><td>平时</td><td>30%</td><td>90</td></tr></tbody>
+        </table>
+        """,
+    )
+
+    result = run_grade_query(
+        config,
+        client,
+        previous_state=_state((_entry("B002", "大学英语", "88"),)),
+        force_email=False,
+        now_factory=lambda: __import__("datetime").datetime.fromisoformat(
+            "2026-05-07T12:00:00+08:00"
+        ),
+    )
+
+    detail_posts = [
+        post for post in client.posts if post[0].endswith("cjcx_cxCjxqGjh.html")
+    ]
+    assert len(detail_posts) == 1
+    assert detail_posts[0][1] == {
+        "jxb_id": "JXB-1",
+        "xnm": "2024",
+        "xqm": "12",
+        "kcmc": "高等数学",
+    }
+    assert detail_posts[0][2]["gnmkdm"] == "N305005"
+    assert result.details[0].course_code == "A001"
+
+
+def test_run_grade_query_skips_details_when_no_changes(tmp_path) -> None:
+    config = _app_config(tmp_path / "config.local.json")
+    client = _QueryClient(
+        {
+            "items": [
+                {
+                    "kch": "A001",
+                    "kcmc": "高等数学",
+                    "cj": "95",
+                    "jxb_id": "JXB-1",
+                }
+            ]
+        }
+    )
+
+    result = run_grade_query(
+        config,
+        client,
+        previous_state=_state((_entry("A001", "高等数学", "95"),)),
+        force_email=False,
+        now_factory=lambda: __import__("datetime").datetime.fromisoformat(
+            "2026-05-07T12:00:00+08:00"
+        ),
+    )
+
+    assert all(not post[0].endswith("cjcx_cxCjxqGjh.html") for post in client.posts)
+    assert result.details == ()
+
+
+def test_run_grade_query_skips_details_when_disabled(tmp_path) -> None:
+    config = _app_config(tmp_path / "config.local.json")
+    config = AppConfig(
+        config_path=config.config_path,
+        cumt=config.cumt,
+        query=config.query,
+        http=config.http,
+        grades=GradesConfig(include_details_on_change=False, detail_concurrency=3),
+        captcha=config.captcha,
+        notify=config.notify,
+        logging=config.logging,
+        output=config.output,
+    )
+    client = _QueryClient(
+        {
+            "items": [
+                {
+                    "kch": "A001",
+                    "kcmc": "高等数学",
+                    "cj": "95",
+                    "jxb_id": "JXB-1",
+                }
+            ]
+        }
+    )
+
+    result = run_grade_query(
+        config,
+        client,
+        previous_state=_state(()),
+        force_email=False,
+        now_factory=lambda: __import__("datetime").datetime.fromisoformat(
+            "2026-05-07T12:00:00+08:00"
+        ),
+    )
+
+    assert all(not post[0].endswith("cjcx_cxCjxqGjh.html") for post in client.posts)
+    assert result.details == ()
+
+
+def test_run_grade_query_continues_when_detail_parse_fails(tmp_path) -> None:
+    config = _app_config(tmp_path / "config.local.json")
+    client = _QueryClient(
+        {
+            "items": [
+                {
+                    "kch": "A001",
+                    "kcmc": "高等数学",
+                    "cj": "95",
+                    "jxb_id": "JXB-1",
+                }
+            ]
+        },
+        detail_html="<html></html>",
+    )
+
+    result = run_grade_query(
+        config,
+        client,
+        previous_state=_state(()),
+        force_email=False,
+        now_factory=lambda: __import__("datetime").datetime.fromisoformat(
+            "2026-05-07T12:00:00+08:00"
+        ),
+    )
+
+    assert len(result.changes) == 1
+    assert result.details == ()
+    assert (tmp_path / "state.json").exists()
+
+
+def test_run_grade_query_fetches_details_when_force_email_is_set(tmp_path) -> None:
+    config = _app_config(tmp_path / "config.local.json")
+    client = _QueryClient(
+        {
+            "items": [
+                {
+                    "kch": "A001",
+                    "kcmc": "高等数学",
+                    "cj": "95",
+                    "jxb_id": "JXB-1",
+                }
+            ]
+        },
+        detail_html="""
+        <span class="red2">高等数学</span>
+        <table id="subtab">
+          <tbody><tr><td>期末</td><td>100%</td><td>95</td></tr></tbody>
+        </table>
+        """,
+    )
+
+    result = run_grade_query(
+        config,
+        client,
+        previous_state=_state((_entry("A001", "高等数学", "95"),)),
+        force_email=True,
+        now_factory=lambda: __import__("datetime").datetime.fromisoformat(
+            "2026-05-07T12:00:00+08:00"
+        ),
+    )
+
+    detail_posts = [
+        post for post in client.posts if post[0].endswith("cjcx_cxCjxqGjh.html")
+    ]
+    assert len(detail_posts) == 1
+    assert result.details[0].course_code == "A001"
+
+
+def test_run_grade_query_applies_detail_concurrency_limit(
+    tmp_path,
+    monkeypatch,
+) -> None:
+    config = _app_config(tmp_path / "config.local.json")
+    config = AppConfig(
+        config_path=config.config_path,
+        cumt=config.cumt,
+        query=config.query,
+        http=config.http,
+        grades=GradesConfig(include_details_on_change=True, detail_concurrency=2),
+        captcha=config.captcha,
+        notify=config.notify,
+        logging=config.logging,
+        output=config.output,
+    )
+    client = _QueryClient(
+        {
+            "items": [
+                {
+                    "kch": "A001",
+                    "kcmc": "高等数学",
+                    "cj": "95",
+                    "jxb_id": "JXB-1",
+                },
+                {
+                    "kch": "B002",
+                    "kcmc": "大学英语",
+                    "cj": "88",
+                    "jxb_id": "JXB-2",
+                },
+                {
+                    "kch": "C003",
+                    "kcmc": "大学物理",
+                    "cj": "90",
+                    "jxb_id": "JXB-3",
+                },
+            ]
+        },
+        detail_html="""
+        <span class="red2">课程</span>
+        <table id="subtab">
+          <tbody><tr><td>期末</td><td>100%</td><td>95</td></tr></tbody>
+        </table>
+        """,
+    )
+    created_workers: list[int] = []
+
+    class FakeExecutor:
+        def __init__(self, *, max_workers: int) -> None:
+            created_workers.append(max_workers)
+
+        def __enter__(self) -> "FakeExecutor":
+            return self
+
+        def __exit__(self, *args: object) -> None:
+            return None
+
+        def map(
+            self,
+            fn: Callable[[CourseGrade], object],
+            items: Iterable[CourseGrade],
+        ) -> list[object]:
+            return [fn(item) for item in items]
+
+    monkeypatch.setattr(service_module, "ThreadPoolExecutor", FakeExecutor)
+
+    run_grade_query(
+        config,
+        client,
+        previous_state=_state(()),
+        force_email=False,
+        now_factory=lambda: __import__("datetime").datetime.fromisoformat(
+            "2026-05-07T12:00:00+08:00"
+        ),
+    )
+
+    assert created_workers == [2]
 
 
 def test_run_grade_query_does_not_update_state_when_notify_fails(tmp_path) -> None:

@@ -73,12 +73,12 @@ def build_parser() -> argparse.ArgumentParser:
     query_parser.add_argument(
         "--save-json",
         action="store_true",
-        help="Save grade JSON output when query logic is implemented.",
+        help="Save grade JSON output to the configured output directory.",
     )
     query_parser.add_argument(
         "--save-report",
         action="store_true",
-        help="Save an HTML report when query logic is implemented.",
+        help="Save an HTML report to the configured output directory.",
     )
     query_parser.add_argument(
         "--output-dir",

@@ -12,16 +12,17 @@ cumt-jwxt grades query
 
 - 标准 `src` 包结构、`pyproject.toml`、`uv` 工具链和 CLI 入口
 - 配置加载、环境变量覆盖、最小运行状态读写
-- 成绩列表 JSON 解析、快照比较、文本/HTML 报告生成
+- 成绩列表 JSON 解析、详情 HTML 解析、快照比较、文本/HTML 报告生成
 - HTTP 客户端、登录流程、OpenAI 兼容验证码识别、SMTP 邮件发送的边界层实现
 - 基础 session 复用与会话失效回退登录
-- `grades query` 的最小闭环：网络检测 -> 尝试复用 session 查成绩 -> 失效时登录 -> 查询/报告/通知 -> 更新 `state.json`
+- 仅在有变更或 `--force-email` 时抓取详细成绩构成，并合入 HTML 报告
+- `grades query` 的最小闭环：网络检测 -> 尝试复用 session 查成绩 -> 失效时登录 -> 查询/按需抓详情/报告/通知 -> 更新 `state.json`
 
 当前仍未完成的能力：
 
 - 交互式配置补全
-- 详细成绩查询与并发抓取
 - 更完整的公开使用文档和定时任务示例
+- README 的常见故障、免责声明与更完整保存产物说明
 
 ## 安装与验证
 
@@ -63,13 +64,16 @@ CLI 参数 > CUMT_JWXT_* 环境变量 > config.local.json > 默认值
 6. 登录 JWXT，登录提交后的 302 跳转视为成功登录
 7. 重新查询成绩列表 JSON
 8. 解析成绩并生成快照
-9. 输出纯文本摘要
-10. 在启用通知且有变更或 `--force-email` 时发送 HTML 邮件
-11. 将 session、快照和查询时间写入配置文件旁的 `state.json`
+9. 在启用 `grades.include_details_on_change` 且有变更或 `--force-email` 时抓取详细成绩构成
+10. 输出纯文本摘要
+11. 在启用通知且有变更或 `--force-email` 时发送 HTML 邮件
+12. 将 session、快照和查询时间写入配置文件旁的 `state.json`
 
 默认不保存 JSON、HTML 报告或验证码图片。只有显式启用 `--save-json` 或 `--save-report` 时，才会写入输出目录。
 
 `state.json` 会保存受控 session cookie 以便后续运行复用，但不会保存账号、密码、API Key、验证码图片或原始响应正文。
+
+当前 HTML 报告在拿到详细成绩时会追加成绩构成区块；若单门详情查询或解析失败，会退化为只发送成绩列表，不中断整体查询。
 
 ## 邮件通知
 
