@@ -23,8 +23,24 @@ class ConfigError(CUMTJWXTError):
     """Raised when configuration is missing or invalid."""
 
 
+class AuthError(CUMTJWXTError):
+    """Raised when JWXT authentication fails."""
+
+
+class CaptchaError(CUMTJWXTError):
+    """Raised when captcha recognition or manual input fails."""
+
+
+class QueryError(CUMTJWXTError):
+    """Raised when JWXT grade queries fail."""
+
+
 class ParseError(CUMTJWXTError):
     """Raised when external grade data cannot be parsed safely."""
+
+
+class NotifyError(CUMTJWXTError):
+    """Raised when notification delivery fails."""
 
 
 class SnapshotError(CUMTJWXTError):
