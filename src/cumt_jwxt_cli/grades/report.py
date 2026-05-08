@@ -52,6 +52,7 @@ class _ViewChange:
     score_display: str
     fields: tuple[_ViewField, ...]
     detail_summary: str
+    course: _ViewCourse | None
 
 
 @dataclass(frozen=True)
@@ -66,6 +67,7 @@ class _ViewCourse:
     course_name: str
     meta_line: str
     score: str
+    total_score_display: str
     score_class: str
     info_rows: tuple[tuple[_ViewField, ...], ...]
     detail_rows: tuple[_DetailRow, ...]
@@ -175,12 +177,14 @@ def _build_change(
         course_name = change.after.course_name
         course_code = change.after.course_code
         fields = _change_course_fields(grade)
+        course = _build_course(grade, detail) if grade is not None else None
     elif change.change_type == "removed" and change.before is not None:
         status = "移除"
         score_display = f"原成绩 {change.before.score}"
         course_name = change.before.course_name
         course_code = change.before.course_code
         fields = ()
+        course = None
     elif (
         change.change_type == "updated"
         and change.before is not None
@@ -191,12 +195,22 @@ def _build_change(
         course_name = change.after.course_name
         course_code = change.after.course_code
         fields = _change_course_fields(grade)
+        course = (
+            _build_course(
+                grade,
+                detail,
+                total_score_display=f"{change.before.score} -> {change.after.score}",
+            )
+            if grade is not None
+            else None
+        )
     else:
         status = change.change_type
         score_display = "变更记录不完整"
         course_name = "未知课程"
         course_code = "--"
         fields = ()
+        course = None
 
     fields = (("课程代码", course_code), *fields)
     detail_summary = _format_detail_summary(detail) if detail is not None else ""
@@ -206,6 +220,7 @@ def _build_change(
         score_display=score_display,
         fields=_build_fields(fields),
         detail_summary=detail_summary,
+        course=course,
     )
 
 
@@ -235,6 +250,8 @@ def _build_courses(
 def _build_course(
     grade: CourseGrade,
     detail: GradeDetail | None,
+    *,
+    total_score_display: str | None = None,
 ) -> _ViewCourse:
     meta_parts = [grade.course_code]
     if grade.credit:
@@ -255,6 +272,7 @@ def _build_course(
         course_name=grade.course_name,
         meta_line=" | ".join(meta_parts),
         score=grade.score,
+        total_score_display=total_score_display or grade.score,
         score_class=_score_badge_style(grade.score),
         info_rows=_build_info_rows(fields),
         detail_rows=_build_detail_rows(detail),
