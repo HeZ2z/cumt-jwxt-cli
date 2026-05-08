@@ -66,15 +66,32 @@ class JWXTClient:
     def cookies(self) -> dict[str, str]:
         """Return a serializable cookie snapshot."""
 
+        return self.export_cookies()
+
+    def load_cookies(self, cookies: Mapping[str, str] | None) -> None:
+        """Replace the current cookie jar with a serialized snapshot."""
+
+        self._client.cookies.clear()
+        if cookies:
+            self._client.cookies.update(dict(cookies))
+
+    def export_cookies(self) -> dict[str, str]:
+        """Return a serializable cookie snapshot."""
+
         snapshot: dict[str, str] = {}
         for cookie in self._client.cookies.jar:
             snapshot[cookie.name] = cookie.value
         return snapshot
 
+    def reset_session(self) -> None:
+        """Drop session cookies before starting a fresh login."""
+
+        self._client.cookies.clear()
+
     def clear_cookies(self) -> None:
         """Drop all cookies before forcing a fresh login."""
 
-        self._client.cookies.clear()
+        self.reset_session()
 
     def check_reachable(self) -> None:
         """Fail fast when the JWXT host cannot be reached with this client."""
