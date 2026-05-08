@@ -283,6 +283,133 @@ def test_run_grade_query_saves_state_after_successful_query(tmp_path) -> None:
     ]
 
 
+def test_run_grade_query_saves_json_with_stable_schema_in_explicit_output_dir(
+    tmp_path,
+) -> None:
+    output_dir = tmp_path / "artifacts"
+    config = _app_config(tmp_path / "config.local.json")
+    config = AppConfig(
+        config_path=config.config_path,
+        cumt=config.cumt,
+        query=config.query,
+        http=config.http,
+        grades=config.grades,
+        captcha=config.captcha,
+        notify=config.notify,
+        logging=config.logging,
+        output=OutputConfig(
+            save_json=True,
+            save_report=False,
+            output_dir=str(output_dir),
+        ),
+    )
+    client = _QueryClient(
+        {
+            "items": [
+                {
+                    "kch": "A001",
+                    "kcmc": "高等数学",
+                    "cj": "95",
+                    "xf": "4.0",
+                    "jd": "4.5",
+                    "xfjd": "18.0",
+                    "kcxzmc": "必修",
+                    "khfsmc": "考试",
+                    "jsxm": "张老师",
+                    "jxb_id": "JXB-1",
+                }
+            ]
+        },
+        detail_html="""
+        <span class="red2">高等数学</span>
+        <table id="subtab">
+          <tbody><tr><td>平时</td><td>30%</td><td>90</td></tr></tbody>
+        </table>
+        """,
+    )
+
+    run_grade_query(
+        config,
+        client,
+        previous_state=_state(()),
+        force_email=False,
+        now_factory=lambda: __import__("datetime").datetime.fromisoformat(
+            "2026-05-07T12:00:00+08:00"
+        ),
+    )
+
+    payload = json.loads((output_dir / "grades.json").read_text(encoding="utf-8"))
+
+    assert set(payload) == {"grades", "changes", "details", "summary"}
+    assert set(payload["grades"][0]) == {
+        "course_code",
+        "course_name",
+        "score",
+        "credit",
+        "grade_point",
+        "credit_grade_point",
+        "course_type",
+        "exam_type",
+        "teacher_name",
+        "teaching_class_id",
+    }
+    assert set(payload["changes"][0]) == {"change_type", "before", "after"}
+    assert payload["changes"][0]["before"] is None
+    assert set(payload["changes"][0]["after"]) == {
+        "course_code",
+        "course_name",
+        "score",
+    }
+    assert set(payload["details"][0]) == {"course_code", "course_name", "components"}
+    assert set(payload["details"][0]["components"][0]) == {
+        "name",
+        "percentage",
+        "score",
+    }
+    assert "session_cookies" not in payload
+    assert "session_updated_at" not in payload
+    assert "username" not in json.dumps(payload, ensure_ascii=False)
+    assert "password" not in json.dumps(payload, ensure_ascii=False)
+
+
+def test_run_grade_query_uses_explicit_output_dir_for_json_output(
+    tmp_path,
+) -> None:
+    output_dir = tmp_path / "custom-output"
+    config = _app_config(tmp_path / "config.local.json")
+    config = AppConfig(
+        config_path=config.config_path,
+        cumt=config.cumt,
+        query=config.query,
+        http=config.http,
+        grades=config.grades,
+        captcha=config.captcha,
+        notify=config.notify,
+        logging=config.logging,
+        output=OutputConfig(
+            save_json=True,
+            save_report=False,
+            output_dir=str(output_dir),
+        ),
+    )
+    client = _QueryClient(
+        {"items": [{"kch": "A001", "kcmc": "高等数学", "cj": "95"}]}
+    )
+
+    run_grade_query(
+        config,
+        client,
+        previous_state=_state(()),
+        force_email=False,
+        now_factory=lambda: __import__("datetime").datetime.fromisoformat(
+            "2026-05-07T12:00:00+08:00"
+        ),
+    )
+
+    assert (output_dir / "grades.json").exists()
+    assert not (tmp_path / "output" / "grades.json").exists()
+
+
 def test_run_grade_query_fetches_details_for_changed_courses(tmp_path) -> None:
     config = _app_config(tmp_path / "config.local.json")
     client = _QueryClient(

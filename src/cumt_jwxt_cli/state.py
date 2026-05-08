@@ -3,12 +3,12 @@
 from __future__ import annotations
 
 import json
-from datetime import datetime
 from pathlib import Path
 from typing import Any
 
 from cumt_jwxt_cli.errors import StateError
 from cumt_jwxt_cli.models import AppConfig, GradeSnapshotEntry, RuntimeState
+from cumt_jwxt_cli.time_utils import normalize_optional_iso_timestamp
 
 _SCHEMA_VERSION = 2
 _ALLOWED_KEYS = {
@@ -96,7 +96,7 @@ def _deserialize_runtime_state(payload: Any) -> RuntimeState:
         session_updated_at=(
             None
             if schema_version == 1
-            else _optional_iso_string(
+            else _normalize_state_timestamp(
                 payload["session_updated_at"], "session_updated_at"
             )
         ),
@@ -104,10 +104,10 @@ def _deserialize_runtime_state(payload: Any) -> RuntimeState:
             _deserialize_snapshot_entry(entry, index)
             for index, entry in enumerate(snapshot_payload)
         ),
-        last_successful_query_at=_optional_iso_string(
+        last_successful_query_at=_normalize_state_timestamp(
             payload["last_successful_query_at"], "last_successful_query_at"
         ),
-        last_notified_at=_optional_iso_string(
+        last_notified_at=_normalize_state_timestamp(
             payload["last_notified_at"], "last_notified_at"
         ),
     )
@@ -169,36 +169,25 @@ def _required_state_string(value: Any, field_name: str, index: int) -> str:
     return stripped
 
 
-def _optional_iso_string(value: Any, field_name: str) -> str | None:
-    if value is None:
-        return None
-    if not isinstance(value, str):
-        raise StateError(f"State field {field_name} must be a string or null.")
-    stripped = value.strip()
-    if not stripped:
-        raise StateError(f"State field {field_name} must not be blank when present.")
-
-    value_to_parse = (
-        stripped.removesuffix("Z") + "+00:00" if stripped.endswith("Z") else stripped
+def _normalize_state_timestamp(value: Any, field_name: str) -> str | None:
+    return normalize_optional_iso_timestamp(
+        value,
+        field_label=f"State field {field_name}",
+        error_factory=StateError,
     )
-    try:
-        datetime.fromisoformat(value_to_parse)
-    except ValueError as exc:
-        raise StateError(
-            f"State field {field_name} must be an ISO 8601 timestamp."
-        ) from exc
-    return stripped
 
 
 def _serialize_runtime_state(state: RuntimeState) -> dict[str, object]:
     _validate_schema_version(state.schema_version)
-    session_updated_at = _optional_iso_string(
+    session_updated_at = _normalize_state_timestamp(
         state.session_updated_at, "session_updated_at"
     )
-    last_successful_query_at = _optional_iso_string(
+    last_successful_query_at = _normalize_state_timestamp(
         state.last_successful_query_at, "last_successful_query_at"
     )
-    last_notified_at = _optional_iso_string(state.last_notified_at, "last_notified_at")
+    last_notified_at = _normalize_state_timestamp(
+        state.last_notified_at, "last_notified_at"
+    )
 
     return {
         "schema_version": _SCHEMA_VERSION,

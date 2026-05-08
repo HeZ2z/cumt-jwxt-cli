@@ -85,6 +85,13 @@ class OutputConfig:
     save_report: bool
     output_dir: str
 
+    def resolve_dir(self, config_path: Path) -> Path:
+        """Resolve the output directory using the configured fallback rule."""
+
+        if self.output_dir:
+            return Path(self.output_dir).expanduser()
+        return config_path.parent / "output"
+
 
 @dataclass(frozen=True)
 class AppConfig:

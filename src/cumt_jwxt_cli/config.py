@@ -25,14 +25,53 @@ from cumt_jwxt_cli.models import (
 
 _ENV_PREFIX = "CUMT_JWXT_"
 _DEFAULT_CONFIG_NAMES = ("config.local.json", "config.json")
+_PATH_CUMT_USERNAME = ("cumt", "username")
+_PATH_CUMT_PASSWORD = ("cumt", "password")
+_PATH_QUERY_YEAR = ("query", "year")
+_PATH_QUERY_SEMESTER = ("query", "semester")
+_PATH_CAPTCHA_PROVIDER = ("captcha", "provider")
+_PATH_CAPTCHA_MANUAL_TIMEOUT = ("captcha", "manual_timeout_seconds")
+_PATH_CAPTCHA_OPENAI_BASE_URL = ("captcha", "openai_compatible", "base_url")
+_PATH_CAPTCHA_OPENAI_API_KEY = ("captcha", "openai_compatible", "api_key")
+_PATH_CAPTCHA_OPENAI_MODEL = ("captcha", "openai_compatible", "model")
+_PATH_NOTIFY_ENABLED = ("notify", "enabled")
+_PATH_NOTIFY_SMTP_HOST = ("notify", "smtp_host")
+_PATH_NOTIFY_SMTP_PORT = ("notify", "smtp_port")
+_PATH_NOTIFY_USERNAME = ("notify", "username")
+_PATH_NOTIFY_PASSWORD = ("notify", "password")
+_PATH_NOTIFY_SENDER = ("notify", "sender")
+_PATH_NOTIFY_SENDER_NAME = ("notify", "sender_name")
+_PATH_NOTIFY_RECIPIENTS = ("notify", "recipients")
+_PATH_LOGGING_RETENTION_DAYS = ("logging", "retention_days")
+_PATH_OUTPUT_SAVE_JSON = ("output", "save_json")
+_PATH_OUTPUT_SAVE_REPORT = ("output", "save_report")
+_PATH_OUTPUT_DIR = ("output", "output_dir")
+_PATH_HTTP_TIMEOUT_SECONDS = ("http", "timeout_seconds")
+_PATH_HTTP_RETRY_ATTEMPTS = ("http", "retry_attempts")
+_PATH_HTTP_RETRY_BACKOFF_SECONDS = ("http", "retry_backoff_seconds")
+_PATH_GRADES_INCLUDE_DETAILS = ("grades", "include_details_on_change")
+_PATH_GRADES_DETAIL_CONCURRENCY = ("grades", "detail_concurrency")
+_ENV_NAME_BY_PATH = {
+    _PATH_CUMT_USERNAME: f"{_ENV_PREFIX}USERNAME",
+    _PATH_CUMT_PASSWORD: f"{_ENV_PREFIX}PASSWORD",
+    _PATH_CAPTCHA_OPENAI_BASE_URL: (
+        f"{_ENV_PREFIX}CAPTCHA_OPENAI_COMPATIBLE_BASE_URL"
+    ),
+    _PATH_CAPTCHA_OPENAI_API_KEY: f"{_ENV_PREFIX}CAPTCHA_OPENAI_COMPATIBLE_API_KEY",
+    _PATH_CAPTCHA_OPENAI_MODEL: f"{_ENV_PREFIX}CAPTCHA_OPENAI_COMPATIBLE_MODEL",
+    _PATH_NOTIFY_SMTP_HOST: f"{_ENV_PREFIX}SMTP_HOST",
+    _PATH_NOTIFY_USERNAME: f"{_ENV_PREFIX}SMTP_USERNAME",
+    _PATH_NOTIFY_PASSWORD: f"{_ENV_PREFIX}SMTP_PASSWORD",
+    _PATH_NOTIFY_SENDER: f"{_ENV_PREFIX}SMTP_SENDER",
+}
 _PROMPT_FIELDS = (
-    ("cumt", "username"),
-    ("cumt", "password"),
-    ("query", "year"),
-    ("query", "semester"),
-    ("captcha", "openai_compatible", "base_url"),
-    ("captcha", "openai_compatible", "api_key"),
-    ("captcha", "openai_compatible", "model"),
+    _PATH_CUMT_USERNAME,
+    _PATH_CUMT_PASSWORD,
+    _PATH_QUERY_YEAR,
+    _PATH_QUERY_SEMESTER,
+    _PATH_CAPTCHA_OPENAI_BASE_URL,
+    _PATH_CAPTCHA_OPENAI_API_KEY,
+    _PATH_CAPTCHA_OPENAI_MODEL,
 )
 
 
@@ -45,144 +84,16 @@ def load_app_config(args: Namespace) -> AppConfig:
         allow_interactive=not bool(getattr(args, "no_interactive", False)),
     )
 
-    cumt_config = CUMTConfig(
-        username=_get_string(
-            raw_config,
-            ("cumt", "username"),
-            env_name=f"{_ENV_PREFIX}USERNAME",
-            required=True,
-        ),
-        password=_get_string(
-            raw_config,
-            ("cumt", "password"),
-            env_name=f"{_ENV_PREFIX}PASSWORD",
-            required=True,
-        ),
-    )
-    query_config = QueryConfig(
-        year=(
-            str(args.year)
-            if args.year is not None
-            else _get_string(raw_config, ("query", "year"), required=True)
-        ),
-        semester=(
-            str(args.semester)
-            if args.semester is not None
-            else _get_string(raw_config, ("query", "semester"), required=True)
-        ),
-    )
-    http_config = HTTPConfig(
-        timeout_seconds=_get_float(
-            raw_config, ("http", "timeout_seconds"), default=30.0
-        ),
-        retry_attempts=_get_int(raw_config, ("http", "retry_attempts"), default=2),
-        retry_backoff_seconds=_get_float(
-            raw_config,
-            ("http", "retry_backoff_seconds"),
-            default=1.5,
-        ),
-    )
-    grades_config = GradesConfig(
-        include_details_on_change=_get_bool(
-            raw_config,
-            ("grades", "include_details_on_change"),
-            default=True,
-        ),
-        detail_concurrency=_get_int(
-            raw_config,
-            ("grades", "detail_concurrency"),
-            default=3,
-        ),
-    )
-    captcha_config = CaptchaConfig(
-        provider=_get_string(
-            raw_config, ("captcha", "provider"), default="openai_compatible"
-        ),
-        manual_timeout_seconds=_get_int(
-            raw_config,
-            ("captcha", "manual_timeout_seconds"),
-            default=60,
-        ),
-        openai_compatible=OpenAICompatibleConfig(
-            base_url=_get_string(
-                raw_config,
-                ("captcha", "openai_compatible", "base_url"),
-                env_name=f"{_ENV_PREFIX}CAPTCHA_OPENAI_COMPATIBLE_BASE_URL",
-                default="",
-            ),
-            api_key=_get_string(
-                raw_config,
-                ("captcha", "openai_compatible", "api_key"),
-                env_name=f"{_ENV_PREFIX}CAPTCHA_OPENAI_COMPATIBLE_API_KEY",
-                default="",
-            ),
-            model=_get_string(
-                raw_config,
-                ("captcha", "openai_compatible", "model"),
-                env_name=f"{_ENV_PREFIX}CAPTCHA_OPENAI_COMPATIBLE_MODEL",
-                default="",
-            ),
-        ),
-    )
-    notify_config = NotifyConfig(
-        enabled=_get_bool(raw_config, ("notify", "enabled"), default=False),
-        smtp_host=_get_string(
-            raw_config,
-            ("notify", "smtp_host"),
-            env_name=f"{_ENV_PREFIX}SMTP_HOST",
-            default="",
-        ),
-        smtp_port=_get_int(raw_config, ("notify", "smtp_port"), default=465),
-        username=_get_string(
-            raw_config,
-            ("notify", "username"),
-            env_name=f"{_ENV_PREFIX}SMTP_USERNAME",
-            default="",
-        ),
-        password=_get_string(
-            raw_config,
-            ("notify", "password"),
-            env_name=f"{_ENV_PREFIX}SMTP_PASSWORD",
-            default="",
-        ),
-        sender=_get_string(
-            raw_config,
-            ("notify", "sender"),
-            env_name=f"{_ENV_PREFIX}SMTP_SENDER",
-            default="",
-        ),
-        sender_name=_get_string(
-            raw_config,
-            ("notify", "sender_name"),
-            default="",
-        ),
-        recipients=tuple(_get_string_list(raw_config, ("notify", "recipients"))),
-    )
-    logging_config = LoggingConfig(
-        retention_days=_get_int(raw_config, ("logging", "retention_days"), default=14)
-    )
-    output_config = OutputConfig(
-        save_json=bool(args.save_json)
-        or _get_bool(raw_config, ("output", "save_json"), default=False),
-        save_report=bool(args.save_report)
-        or _get_bool(raw_config, ("output", "save_report"), default=False),
-        output_dir=(
-            args.output_dir
-            if args.output_dir is not None
-            else _get_string(raw_config, ("output", "output_dir"), default="")
-        ),
-    )
-
     return AppConfig(
         config_path=config_path,
-        cumt=cumt_config,
-        query=query_config,
-        http=http_config,
-        grades=grades_config,
-        captcha=captcha_config,
-        notify=notify_config,
-        logging=logging_config,
-        output=output_config,
+        cumt=_build_cumt_config(raw_config),
+        query=_build_query_config(raw_config, args),
+        http=_build_http_config(raw_config),
+        grades=_build_grades_config(raw_config),
+        captcha=_build_captcha_config(raw_config),
+        notify=_build_notify_config(raw_config),
+        logging=_build_logging_config(raw_config),
+        output=_build_output_config(raw_config, args),
     )
 
 
@@ -295,26 +206,162 @@ def _set_nested(raw_config: dict[str, Any], path: tuple[str, ...], value: str) -
 
 
 def _env_name_for_path(path: tuple[str, ...]) -> str | None:
-    env_names = {
-        ("cumt", "username"): f"{_ENV_PREFIX}USERNAME",
-        ("cumt", "password"): f"{_ENV_PREFIX}PASSWORD",
-        (
-            "captcha",
-            "openai_compatible",
-            "base_url",
-        ): f"{_ENV_PREFIX}CAPTCHA_OPENAI_COMPATIBLE_BASE_URL",
-        (
-            "captcha",
-            "openai_compatible",
-            "api_key",
-        ): f"{_ENV_PREFIX}CAPTCHA_OPENAI_COMPATIBLE_API_KEY",
-        (
-            "captcha",
-            "openai_compatible",
-            "model",
-        ): f"{_ENV_PREFIX}CAPTCHA_OPENAI_COMPATIBLE_MODEL",
-    }
-    return env_names.get(path)
+    return _ENV_NAME_BY_PATH.get(path)
+
+
+def _build_cumt_config(raw_config: dict[str, Any]) -> CUMTConfig:
+    return CUMTConfig(
+        username=_get_string(
+            raw_config,
+            _PATH_CUMT_USERNAME,
+            env_name=_env_name_for_path(_PATH_CUMT_USERNAME),
+            required=True,
+        ),
+        password=_get_string(
+            raw_config,
+            _PATH_CUMT_PASSWORD,
+            env_name=_env_name_for_path(_PATH_CUMT_PASSWORD),
+            required=True,
+        ),
+    )
+
+
+def _build_query_config(raw_config: dict[str, Any], args: Namespace) -> QueryConfig:
+    return QueryConfig(
+        year=(
+            str(args.year)
+            if args.year is not None
+            else _get_string(raw_config, _PATH_QUERY_YEAR, required=True)
+        ),
+        semester=(
+            str(args.semester)
+            if args.semester is not None
+            else _get_string(raw_config, _PATH_QUERY_SEMESTER, required=True)
+        ),
+    )
+
+
+def _build_http_config(raw_config: dict[str, Any]) -> HTTPConfig:
+    return HTTPConfig(
+        timeout_seconds=_get_float(
+            raw_config,
+            _PATH_HTTP_TIMEOUT_SECONDS,
+            default=30.0,
+        ),
+        retry_attempts=_get_int(raw_config, _PATH_HTTP_RETRY_ATTEMPTS, default=2),
+        retry_backoff_seconds=_get_float(
+            raw_config,
+            _PATH_HTTP_RETRY_BACKOFF_SECONDS,
+            default=1.5,
+        ),
+    )
+
+
+def _build_grades_config(raw_config: dict[str, Any]) -> GradesConfig:
+    return GradesConfig(
+        include_details_on_change=_get_bool(
+            raw_config,
+            _PATH_GRADES_INCLUDE_DETAILS,
+            default=True,
+        ),
+        detail_concurrency=_get_int(
+            raw_config,
+            _PATH_GRADES_DETAIL_CONCURRENCY,
+            default=3,
+        ),
+    )
+
+
+def _build_captcha_config(raw_config: dict[str, Any]) -> CaptchaConfig:
+    return CaptchaConfig(
+        provider=_get_string(
+            raw_config,
+            _PATH_CAPTCHA_PROVIDER,
+            default="openai_compatible",
+        ),
+        manual_timeout_seconds=_get_int(
+            raw_config,
+            _PATH_CAPTCHA_MANUAL_TIMEOUT,
+            default=60,
+        ),
+        openai_compatible=OpenAICompatibleConfig(
+            base_url=_get_string(
+                raw_config,
+                _PATH_CAPTCHA_OPENAI_BASE_URL,
+                env_name=_env_name_for_path(_PATH_CAPTCHA_OPENAI_BASE_URL),
+                default="",
+            ),
+            api_key=_get_string(
+                raw_config,
+                _PATH_CAPTCHA_OPENAI_API_KEY,
+                env_name=_env_name_for_path(_PATH_CAPTCHA_OPENAI_API_KEY),
+                default="",
+            ),
+            model=_get_string(
+                raw_config,
+                _PATH_CAPTCHA_OPENAI_MODEL,
+                env_name=_env_name_for_path(_PATH_CAPTCHA_OPENAI_MODEL),
+                default="",
+            ),
+        ),
+    )
+
+
+def _build_notify_config(raw_config: dict[str, Any]) -> NotifyConfig:
+    return NotifyConfig(
+        enabled=_get_bool(raw_config, _PATH_NOTIFY_ENABLED, default=False),
+        smtp_host=_get_string(
+            raw_config,
+            _PATH_NOTIFY_SMTP_HOST,
+            env_name=_env_name_for_path(_PATH_NOTIFY_SMTP_HOST),
+            default="",
+        ),
+        smtp_port=_get_int(raw_config, _PATH_NOTIFY_SMTP_PORT, default=465),
+        username=_get_string(
+            raw_config,
+            _PATH_NOTIFY_USERNAME,
+            env_name=_env_name_for_path(_PATH_NOTIFY_USERNAME),
+            default="",
+        ),
+        password=_get_string(
+            raw_config,
+            _PATH_NOTIFY_PASSWORD,
+            env_name=_env_name_for_path(_PATH_NOTIFY_PASSWORD),
+            default="",
+        ),
+        sender=_get_string(
+            raw_config,
+            _PATH_NOTIFY_SENDER,
+            env_name=_env_name_for_path(_PATH_NOTIFY_SENDER),
+            default="",
+        ),
+        sender_name=_get_string(
+            raw_config,
+            _PATH_NOTIFY_SENDER_NAME,
+            default="",
+        ),
+        recipients=tuple(_get_string_list(raw_config, _PATH_NOTIFY_RECIPIENTS)),
+    )
+
+
+def _build_logging_config(raw_config: dict[str, Any]) -> LoggingConfig:
+    return LoggingConfig(
+        retention_days=_get_int(raw_config, _PATH_LOGGING_RETENTION_DAYS, default=14)
+    )
+
+
+def _build_output_config(raw_config: dict[str, Any], args: Namespace) -> OutputConfig:
+    return OutputConfig(
+        save_json=bool(args.save_json)
+        or _get_bool(raw_config, _PATH_OUTPUT_SAVE_JSON, default=False),
+        save_report=bool(args.save_report)
+        or _get_bool(raw_config, _PATH_OUTPUT_SAVE_REPORT, default=False),
+        output_dir=(
+            args.output_dir
+            if args.output_dir is not None
+            else _get_string(raw_config, _PATH_OUTPUT_DIR, default="")
+        ),
+    )
 
 
 def _get_nested(raw_config: dict[str, Any], path: tuple[str, ...]) -> Any:
