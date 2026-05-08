@@ -1,12 +1,26 @@
-# cumt-jwxt-cli
+# CUMT-JWXT-CLI
+
+![Python](https://img.shields.io/static/v1?label=Python&message=3.11%2B&color=3776AB&logo=python&logoColor=white)
+![uv](https://img.shields.io/badge/uv-managed-6A5ACD?logo=uv&logoColor=white)
+![pytest](https://img.shields.io/badge/tests-pytest-0A9EDC?logo=pytest&logoColor=white)
+![ruff](https://img.shields.io/badge/lint-ruff-D7FF64?logo=ruff&logoColor=111111)
+![License](https://img.shields.io/badge/license-MIT-green)
 
 `cumt-jwxt-cli` 是面向 CUMT 教务系统的 Python CLI，用于查询成绩、检测成绩变化，并在需要时发送邮件通知。
+
+推荐在服务器上定时运行，或在本地交互式使用。支持配置文件和环境变量，适合自动化脚本和定期检查。
 
 当前主命令：
 
 ```bash
 cumt-jwxt grades query
 ```
+
+## 报告示例
+
+下图展示了有新的成绩变更时，邮件发送的效果(重要信息已做混淆)：
+
+<img src="docs/images/grade-report-demo.png" alt="HTML 成绩报告示例" width="220">
 
 ## 当前能力
 

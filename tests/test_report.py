@@ -135,7 +135,7 @@ def test_build_html_report_renders_email_compatible_course_cards() -> None:
     assert "4" in html
     assert "总学分未计入：大学英语" in html
     assert "变更摘要" in html
-    assert "课程性质" in html
+    assert "A001 | 4.0 学分 | 通识教育必修课" in html
     assert "通识教育必修课" in html
     assert "学分绩点" in html
     assert "张老师" in html
@@ -174,7 +174,6 @@ def test_build_html_report_escapes_external_text() -> None:
     assert "<img>" not in html
     assert "&lt;script&gt;alert(1)&lt;/script&gt;" in html
     assert "&lt;b&gt;必修&lt;/b&gt;" in html
-    assert "&lt;i&gt;考试&lt;/i&gt;" in html
     assert "&lt;img&gt;" in html
 
 
@@ -206,6 +205,47 @@ def test_build_html_report_course_card_uses_compact_three_fields() -> None:
     assert "任课教师" in html
     assert "考试" not in html
     assert html.count("学分绩点") == 1
+
+
+def test_build_html_report_updated_change_keeps_score_arrow_in_detail_total() -> None:
+    html = build_html_report(
+        grades=(
+            _grade(
+                "A001",
+                "高等数学",
+                "95",
+                credit="4.0",
+                grade_point="4.5",
+                credit_grade_point="18.0",
+                course_type="通识教育必修课",
+                teacher_name="张老师",
+            ),
+        ),
+        changes=(
+            GradeChange(
+                change_type="updated",
+                before=_entry("A001", "高等数学", "90"),
+                after=_entry("A001", "高等数学", "95"),
+            ),
+        ),
+        details=(
+            GradeDetail(
+                course_code="A001",
+                course_name="高等数学",
+                components=(
+                    GradeDetailComponent(name="平时", percentage="30%", score="90"),
+                ),
+            ),
+        ),
+        year="2024",
+        semester="12",
+        queried_at="2026-05-07T12:00:00+08:00",
+    )
+
+    assert html.count("90 -&gt; 95") == 1
+    assert "总评" in html
+    assert "A001 | 4.0 学分 | 通识教育必修课" in html
+    assert "成绩构成：平时 90 (30%)" not in html
 
 
 def test_build_html_report_course_card_keeps_columns_with_missing_fields() -> None:
