@@ -66,10 +66,10 @@ def test_jwxt_client_cookie_snapshot_tolerates_duplicate_cookie_names() -> None:
             path="/jwglxt",
         )
 
-        assert client.cookies()["JSESSIONID"] == "new"
+        assert client.export_cookies()["JSESSIONID"] == "new"
 
 
-def test_jwxt_client_can_clear_session_cookies() -> None:
+def test_jwxt_client_load_export_and_reset_session() -> None:
     with JWXTClient(
         timeout_seconds=5,
         retry_attempts=0,
@@ -77,6 +77,15 @@ def test_jwxt_client_can_clear_session_cookies() -> None:
         cookies={"JSESSIONID": "old", "route": "node"},
         trust_env=False,
     ) as client:
+        client.load_cookies({"JSESSIONID": "new"})
+
+        assert client.export_cookies() == {"JSESSIONID": "new"}
+
+        client.reset_session()
+
+        assert client.export_cookies() == {}
+
+        client.load_cookies({"route": "node"})
         client.clear_cookies()
 
         assert client.cookies() == {}

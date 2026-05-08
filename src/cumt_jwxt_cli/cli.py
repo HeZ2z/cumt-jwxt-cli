@@ -3,11 +3,8 @@
 import argparse
 import sys
 from collections.abc import Sequence
-from datetime import UTC, datetime
 
-from cumt_jwxt_cli.captcha.openai_compatible import recognize_captcha
-from cumt_jwxt_cli.client.auth import login
-from cumt_jwxt_cli.client.http import JWXTClient
+from cumt_jwxt_cli.app import query_grades_with_session_reuse
 from cumt_jwxt_cli.config import load_app_config
 from cumt_jwxt_cli.errors import (
     AuthError,
@@ -21,10 +18,7 @@ from cumt_jwxt_cli.errors import (
     StateError,
 )
 from cumt_jwxt_cli.grades.report import build_text_summary
-from cumt_jwxt_cli.grades.service import is_session_query_failure, run_grade_query
 from cumt_jwxt_cli.logging_config import configure_logging
-from cumt_jwxt_cli.models import AppConfig, RuntimeState
-from cumt_jwxt_cli.state import load_runtime_state
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -107,21 +101,11 @@ def _handle_grades_query(args: argparse.Namespace) -> int:
             retention_days=config.logging.retention_days,
             verbose=args.verbose,
         )
-        previous_state = load_runtime_state(config)
-        with JWXTClient(
-            timeout_seconds=config.http.timeout_seconds,
-            retry_attempts=config.http.retry_attempts,
-            retry_backoff_seconds=config.http.retry_backoff_seconds,
-            cookies=previous_state.session_cookies,
+        result = query_grades_with_session_reuse(
+            config,
+            force_email=args.force_email,
             trust_env=not args.no_proxy,
-        ) as client:
-            client.check_reachable()
-            result = _run_grade_query_with_session_reuse(
-                config=config,
-                client=client,
-                previous_state=previous_state,
-                force_email=args.force_email,
-            )
+        )
     except ConfigError as exc:
         print(str(exc), file=sys.stderr)
         return int(ExitCode.CONFIG_ERROR)
@@ -151,68 +135,6 @@ def _handle_grades_query(args: argparse.Namespace) -> int:
         )
     )
     return int(ExitCode.OK)
-
-
-def _run_grade_query_with_session_reuse(
-    *,
-    config: AppConfig,
-    client: object,
-    previous_state: RuntimeState,
-    force_email: bool,
-) -> object:
-    if not previous_state.session_cookies:
-        login(
-            config,
-            client,
-            recognize_captcha=lambda image, app_config: recognize_captcha(
-                image,
-                app_config.captcha.openai_compatible,
-                manual_timeout_seconds=app_config.captcha.manual_timeout_seconds,
-            ),
-        )
-        return run_grade_query(
-            config,
-            client,
-            previous_state=previous_state,
-            session_cookies=client.cookies(),
-            session_updated_at=_now_iso(),
-            force_email=force_email,
-        )
-
-    try:
-        return run_grade_query(
-            config,
-            client,
-            previous_state=previous_state,
-            session_cookies=client.cookies(),
-            force_email=force_email,
-        )
-    except QueryError as exc:
-        if previous_state.session_cookies and is_session_query_failure(exc):
-            login(
-                config,
-                client,
-                recognize_captcha=lambda image, app_config: recognize_captcha(
-                    image,
-                    app_config.captcha.openai_compatible,
-                    manual_timeout_seconds=(
-                        app_config.captcha.manual_timeout_seconds
-                    ),
-                ),
-            )
-            return run_grade_query(
-                config,
-                client,
-                previous_state=previous_state,
-                session_cookies=client.cookies(),
-                session_updated_at=_now_iso(),
-                force_email=force_email,
-            )
-        raise
-
-
-def _now_iso() -> str:
-    return datetime.now(UTC).isoformat()
 
 
 def main(argv: Sequence[str] | None = None) -> int:
