@@ -110,7 +110,7 @@ def test_main_runs_grades_query_workflow(capsys, tmp_path, monkeypatch) -> None:
     captured = capsys.readouterr()
 
     assert exit_code == int(ExitCode.OK)
-    assert "CUMT grades 2024-12" in captured.out
+    assert "CUMT 成绩报告 2024-2025学年 第二学期" in captured.out
     assert captured.err == ""
 
 

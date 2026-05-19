@@ -653,6 +653,41 @@ def test_run_grade_query_fetches_details_when_force_email_is_set(tmp_path) -> No
     assert result.details[0].course_code == "A001"
 
 
+def test_run_grade_query_uses_readable_term_label_in_email_subject(tmp_path) -> None:
+    base_config = _app_config(tmp_path / "config.local.json", notify_enabled=True)
+    config = AppConfig(
+        config_path=base_config.config_path,
+        cumt=base_config.cumt,
+        query=QueryConfig(year="2025", semester="3"),
+        http=base_config.http,
+        grades=base_config.grades,
+        captcha=base_config.captcha,
+        notify=base_config.notify,
+        logging=base_config.logging,
+        output=base_config.output,
+    )
+    client = _QueryClient(
+        {"items": [{"kch": "A001", "kcmc": "高等数学", "cj": "95"}]}
+    )
+    sent_subjects: list[str] = []
+
+    def collect_email(*args: object, subject: str, **kwargs: object) -> None:
+        sent_subjects.append(subject)
+
+    run_grade_query(
+        config,
+        client,
+        previous_state=_state((_entry("A001", "高等数学", "95"),)),
+        force_email=True,
+        now_factory=lambda: __import__("datetime").datetime.fromisoformat(
+            "2026-05-07T12:00:00+08:00"
+        ),
+        send_email=collect_email,
+    )
+
+    assert sent_subjects == ["CUMT 成绩报告 2025-2026学年 第一学期"]
+
+
 def test_run_grade_query_applies_detail_concurrency_limit(
     tmp_path,
     monkeypatch,

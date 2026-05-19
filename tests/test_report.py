@@ -74,7 +74,7 @@ def test_build_text_summary_highlights_changes_and_lists_current_grades() -> Non
         queried_at="2026-05-07T12:00:00+08:00",
     )
 
-    assert "CUMT grades 2024-12" in summary
+    assert "CUMT 成绩报告 2024-2025学年 第二学期" in summary
     assert "Changes: 2" in summary
     assert "[added] A001 高等数学: 95" in summary
     assert "[updated] B002 大学英语: 80 -> 88" in summary
@@ -128,6 +128,7 @@ def test_build_html_report_renders_email_compatible_course_cards() -> None:
     )
 
     assert "CUMT 成绩报告" in html
+    assert "<title>CUMT 成绩报告 2024-2025学年 第二学期</title>" in html
     assert "2024-2025学年 第二学期" in html
     assert "当前课程数" in html
     assert "变更数量" in html

@@ -8,7 +8,11 @@ from dataclasses import dataclass
 from datetime import datetime
 
 from cumt_jwxt_cli.grades.query_state import now_iso
-from cumt_jwxt_cli.grades.report import build_html_report, build_text_summary
+from cumt_jwxt_cli.grades.report import (
+    build_html_report,
+    build_text_summary,
+    format_term_label,
+)
 from cumt_jwxt_cli.models import (
     AppConfig,
     CourseGrade,
@@ -68,7 +72,10 @@ def maybe_notify(
     notified_at = now_iso(now_factory)
     send_email(
         config.notify,
-        subject=f"CUMT grades {config.query.year}-{config.query.semester}",
+        subject=(
+            f"CUMT 成绩报告 "
+            f"{format_term_label(config.query.year, config.query.semester)}"
+        ),
         text_body=artifacts.text_summary,
         html_body=artifacts.html_report,
     )
