@@ -134,6 +134,23 @@ class GradeSnapshotEntry:
 
 
 @dataclass(frozen=True)
+class GradeQueryScope:
+    """Identity of one independent grade query history."""
+
+    year: str
+    semester: str
+
+
+@dataclass(frozen=True)
+class PerScopeState:
+    """Persisted grade state for one query scope."""
+
+    snapshot: tuple[GradeSnapshotEntry, ...]
+    last_successful_query_at: str | None
+    last_notified_at: str | None
+
+
+@dataclass(frozen=True)
 class GradeChange:
     """Structured difference between two grade snapshots."""
 
@@ -167,9 +184,7 @@ class RuntimeState:
     schema_version: int
     session_cookies: dict[str, str]
     session_updated_at: str | None
-    last_grade_snapshot: tuple[GradeSnapshotEntry, ...]
-    last_successful_query_at: str | None
-    last_notified_at: str | None
+    grade_queries: dict[GradeQueryScope, PerScopeState]
 
 
 @dataclass(frozen=True)

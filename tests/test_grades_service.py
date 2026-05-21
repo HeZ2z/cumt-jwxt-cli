@@ -19,6 +19,7 @@ from cumt_jwxt_cli.models import (
     CourseGrade,
     CUMTConfig,
     GradeChange,
+    GradeQueryScope,
     GradesConfig,
     GradeSnapshotEntry,
     HTTPConfig,
@@ -26,6 +27,7 @@ from cumt_jwxt_cli.models import (
     NotifyConfig,
     OpenAICompatibleConfig,
     OutputConfig,
+    PerScopeState,
     QueryConfig,
     RuntimeState,
 )
@@ -41,29 +43,60 @@ def _entry(course_code: str, course_name: str, score: str) -> GradeSnapshotEntry
     )
 
 
-def _state(
+def _scope(year: str = "2024", semester: str = "12") -> GradeQueryScope:
+    return GradeQueryScope(year=year, semester=semester)
+
+
+def _per_scope(
     snapshot: tuple[GradeSnapshotEntry, ...],
     *,
-    session_cookies: dict[str, str] | None = None,
-    session_updated_at: str | None = None,
     last_successful_query_at: str | None = None,
     last_notified_at: str | None = None,
-) -> RuntimeState:
-    return RuntimeState(
-        schema_version=2,
-        session_cookies={} if session_cookies is None else session_cookies,
-        session_updated_at=session_updated_at,
-        last_grade_snapshot=snapshot,
+) -> PerScopeState:
+    return PerScopeState(
+        snapshot=snapshot,
         last_successful_query_at=last_successful_query_at,
         last_notified_at=last_notified_at,
     )
 
 
-def _app_config(config_path: Path, *, notify_enabled: bool = False) -> AppConfig:
+def _state(
+    snapshot: tuple[GradeSnapshotEntry, ...],
+    *,
+    scope: GradeQueryScope | None = None,
+    grade_queries: dict[GradeQueryScope, PerScopeState] | None = None,
+    session_cookies: dict[str, str] | None = None,
+    session_updated_at: str | None = None,
+    last_successful_query_at: str | None = None,
+    last_notified_at: str | None = None,
+) -> RuntimeState:
+    if grade_queries is None:
+        grade_queries = {
+            _scope() if scope is None else scope: _per_scope(
+                snapshot,
+                last_successful_query_at=last_successful_query_at,
+                last_notified_at=last_notified_at,
+            )
+        }
+    return RuntimeState(
+        schema_version=3,
+        session_cookies={} if session_cookies is None else session_cookies,
+        session_updated_at=session_updated_at,
+        grade_queries=grade_queries,
+    )
+
+
+def _app_config(
+    config_path: Path,
+    *,
+    notify_enabled: bool = False,
+    year: str = "2024",
+    semester: str = "12",
+) -> AppConfig:
     return AppConfig(
         config_path=config_path,
         cumt=CUMTConfig(username="student", password="secret"),
-        query=QueryConfig(year="2024", semester="12"),
+        query=QueryConfig(year=year, semester=semester),
         http=HTTPConfig(
             timeout_seconds=30.0,
             retry_attempts=2,
@@ -128,6 +161,7 @@ def test_build_grade_query_result_creates_snapshot_and_state_from_empty_history(
     result = build_grade_query_result(
         grades,
         previous_state=_state((), last_notified_at="2026-05-05T11:55:00+08:00"),
+        scope=_scope(),
         queried_at="2026-05-05T12:00:00+08:00",
     )
 
@@ -150,12 +184,16 @@ def test_build_grade_query_result_creates_snapshot_and_state_from_empty_history(
         ),
     )
     assert result.state == RuntimeState(
-        schema_version=2,
+        schema_version=3,
         session_cookies={},
         session_updated_at=None,
-        last_grade_snapshot=result.snapshot,
-        last_successful_query_at="2026-05-05T12:00:00+08:00",
-        last_notified_at="2026-05-05T11:55:00+08:00",
+        grade_queries={
+            _scope(): _per_scope(
+                result.snapshot,
+                last_successful_query_at="2026-05-05T12:00:00+08:00",
+                last_notified_at="2026-05-05T11:55:00+08:00",
+            )
+        },
     )
     assert result.details == ()
 
@@ -174,6 +212,7 @@ def test_build_grade_query_result_preserves_compare_snapshots_change_order() -> 
             _grade("B002", "大学英语", "90"),
         ],
         previous_state=previous_state,
+        scope=_scope(),
         queried_at="2026-05-05T12:00:00+08:00",
     )
 
@@ -194,9 +233,36 @@ def test_build_grade_query_result_preserves_compare_snapshots_change_order() -> 
             after=_entry("B002", "大学英语", "90"),
         ),
     )
-    assert result.state.last_grade_snapshot == (
+    assert result.state.grade_queries[_scope()].snapshot == (
         _entry("B002", "大学英语", "90"),
         _entry("C003", "大学物理", "91"),
+    )
+
+
+def test_build_grade_query_result_compares_only_current_scope() -> None:
+    spring_scope = _scope("2025", "3")
+    autumn_scope = _scope("2025", "12")
+    previous_state = _state(
+        (),
+        grade_queries={
+            spring_scope: _per_scope((_entry("A001", "高等数学", "95"),)),
+            autumn_scope: _per_scope((_entry("B002", "大学英语", "88"),)),
+        },
+    )
+
+    result = build_grade_query_result(
+        [_grade("B002", "大学英语", "88")],
+        previous_state=previous_state,
+        scope=autumn_scope,
+        queried_at="2026-05-05T12:00:00+08:00",
+    )
+
+    assert result.changes == ()
+    assert result.state.grade_queries[spring_scope].snapshot == (
+        _entry("A001", "高等数学", "95"),
+    )
+    assert result.state.grade_queries[autumn_scope].snapshot == (
+        _entry("B002", "大学英语", "88"),
     )
 
 
@@ -204,11 +270,15 @@ def test_build_grade_query_result_overrides_last_notified_at_when_provided() -> 
     result = build_grade_query_result(
         [_grade("A001", "高等数学", "95")],
         previous_state=_state((), last_notified_at="2026-05-05T11:55:00+08:00"),
+        scope=_scope(),
         queried_at="2026-05-05T12:00:00+08:00",
         notified_at="2026-05-05T12:05:00+08:00",
     )
 
-    assert result.state.last_notified_at == "2026-05-05T12:05:00+08:00"
+    assert (
+        result.state.grade_queries[_scope()].last_notified_at
+        == "2026-05-05T12:05:00+08:00"
+    )
 
 
 def test_build_grade_query_result_propagates_duplicate_snapshot_identity() -> None:
@@ -219,6 +289,7 @@ def test_build_grade_query_result_propagates_duplicate_snapshot_identity() -> No
                 _grade("A001", "高等数学", "90"),
             ],
             previous_state=_state(()),
+            scope=_scope(),
             queried_at="2026-05-05T12:00:00+08:00",
         )
 
@@ -231,6 +302,7 @@ def test_build_grade_query_result_rejects_missing_query_timestamp() -> None:
                 (),
                 last_successful_query_at="2026-05-05T11:00:00+08:00",
             ),
+            scope=_scope(),
             queried_at=None,  # type: ignore[arg-type]
         )
 
@@ -240,6 +312,7 @@ def test_build_grade_query_result_rejects_invalid_timestamp_fields() -> None:
         build_grade_query_result(
             [_grade("A001", "高等数学", "95")],
             previous_state=_state(()),
+            scope=_scope(),
             queried_at="not-a-timestamp",
         )
 
@@ -247,6 +320,7 @@ def test_build_grade_query_result_rejects_invalid_timestamp_fields() -> None:
         build_grade_query_result(
             [_grade("A001", "高等数学", "95")],
             previous_state=_state(()),
+            scope=_scope(),
             queried_at="2026-05-05T12:00:00+08:00",
             notified_at="  ",
         )
@@ -254,9 +328,7 @@ def test_build_grade_query_result_rejects_invalid_timestamp_fields() -> None:
 
 def test_run_grade_query_saves_state_after_successful_query(tmp_path) -> None:
     config = _app_config(tmp_path / "config.local.json")
-    client = _QueryClient(
-        {"items": [{"kch": "A001", "kcmc": "高等数学", "cj": "95"}]}
-    )
+    client = _QueryClient({"items": [{"kch": "A001", "kcmc": "高等数学", "cj": "95"}]})
 
     result = run_grade_query(
         config,
@@ -277,9 +349,51 @@ def test_run_grade_query_saves_state_after_successful_query(tmp_path) -> None:
         ),
     )
     state_payload = json.loads((tmp_path / "state.json").read_text(encoding="utf-8"))
+    assert state_payload["schema_version"] == 3
     assert state_payload["session_cookies"] == {"JSESSIONID": "existing"}
-    assert state_payload["last_grade_snapshot"] == [
+    assert state_payload["grade_queries"]["2024-12"]["snapshot"] == [
         {"course_code": "A001", "course_name": "高等数学", "score": "95"}
+    ]
+
+
+def test_run_grade_query_keeps_semester_histories_isolated(tmp_path) -> None:
+    spring_scope = _scope("2025", "3")
+    autumn_scope = _scope("2025", "12")
+    previous_state = _state(
+        (),
+        grade_queries={
+            spring_scope: _per_scope((_entry("A001", "高等数学", "95"),)),
+            autumn_scope: _per_scope((_entry("B002", "大学英语", "88"),)),
+        },
+    )
+    config = _app_config(
+        tmp_path / "config.local.json",
+        year="2025",
+        semester="12",
+    )
+    client = _QueryClient({"items": [{"kch": "B002", "kcmc": "大学英语", "cj": "88"}]})
+
+    result = run_grade_query(
+        config,
+        client,
+        previous_state=previous_state,
+        force_email=False,
+        now_factory=lambda: __import__("datetime").datetime.fromisoformat(
+            "2026-05-07T12:00:00+08:00"
+        ),
+    )
+
+    assert result.changes == ()
+    assert result.state.grade_queries[spring_scope].snapshot == (
+        _entry("A001", "高等数学", "95"),
+    )
+    state_payload = json.loads((tmp_path / "state.json").read_text(encoding="utf-8"))
+    assert set(state_payload["grade_queries"]) == {"2025-3", "2025-12"}
+    assert state_payload["grade_queries"]["2025-3"]["snapshot"] == [
+        {"course_code": "A001", "course_name": "高等数学", "score": "95"}
+    ]
+    assert state_payload["grade_queries"]["2025-12"]["snapshot"] == [
+        {"course_code": "B002", "course_name": "大学英语", "score": "88"}
     ]
 
 
@@ -392,9 +506,7 @@ def test_run_grade_query_uses_explicit_output_dir_for_json_output(
             output_dir=str(output_dir),
         ),
     )
-    client = _QueryClient(
-        {"items": [{"kch": "A001", "kcmc": "高等数学", "cj": "95"}]}
-    )
+    client = _QueryClient({"items": [{"kch": "A001", "kcmc": "高等数学", "cj": "95"}]})
 
     run_grade_query(
         config,
@@ -666,9 +778,7 @@ def test_run_grade_query_uses_readable_term_label_in_email_subject(tmp_path) -> 
         logging=base_config.logging,
         output=base_config.output,
     )
-    client = _QueryClient(
-        {"items": [{"kch": "A001", "kcmc": "高等数学", "cj": "95"}]}
-    )
+    client = _QueryClient({"items": [{"kch": "A001", "kcmc": "高等数学", "cj": "95"}]})
     sent_subjects: list[str] = []
 
     def collect_email(*args: object, subject: str, **kwargs: object) -> None:
@@ -770,9 +880,7 @@ def test_run_grade_query_applies_detail_concurrency_limit(
 
 def test_run_grade_query_does_not_update_state_when_notify_fails(tmp_path) -> None:
     config = _app_config(tmp_path / "config.local.json", notify_enabled=True)
-    client = _QueryClient(
-        {"items": [{"kch": "A001", "kcmc": "高等数学", "cj": "95"}]}
-    )
+    client = _QueryClient({"items": [{"kch": "A001", "kcmc": "高等数学", "cj": "95"}]})
 
     def fail_email(*args: object, **kwargs: object) -> None:
         raise NotifyError("boom")

@@ -8,13 +8,22 @@ import pytest
 import cumt_jwxt_cli.cli as cli_module
 from cumt_jwxt_cli.cli import build_parser, main
 from cumt_jwxt_cli.errors import ExitCode
+from cumt_jwxt_cli.models import GradeQueryScope, PerScopeState
 
 
 def _empty_query_result() -> SimpleNamespace:
     return SimpleNamespace(
         grades=(),
         changes=(),
-        state=SimpleNamespace(last_successful_query_at="2026-05-07T12:00:00+08:00"),
+        state=SimpleNamespace(
+            grade_queries={
+                GradeQueryScope(year="2024", semester="12"): PerScopeState(
+                    snapshot=(),
+                    last_successful_query_at="2026-05-07T12:00:00+08:00",
+                    last_notified_at=None,
+                )
+            }
+        ),
     )
 
 

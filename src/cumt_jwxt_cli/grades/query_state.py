@@ -11,6 +11,8 @@ from cumt_jwxt_cli.models import (
     CourseGrade,
     GradeDetail,
     GradeQueryResult,
+    GradeQueryScope,
+    PerScopeState,
     RuntimeState,
 )
 from cumt_jwxt_cli.time_utils import normalize_optional_iso_timestamp
@@ -19,6 +21,7 @@ from cumt_jwxt_cli.time_utils import normalize_optional_iso_timestamp
 def build_grade_query_result(
     grades: Iterable[CourseGrade],
     previous_state: RuntimeState,
+    scope: GradeQueryScope,
     queried_at: str,
     notified_at: str | None = None,
 ) -> GradeQueryResult:
@@ -26,27 +29,35 @@ def build_grade_query_result(
 
     grade_records = tuple(grades)
     current_snapshot = create_grade_snapshot(list(grade_records))
-    changes = tuple(
-        compare_snapshots(previous_state.last_grade_snapshot, current_snapshot)
+    previous_scope_state = previous_state.grade_queries.get(
+        scope,
+        PerScopeState(
+            snapshot=(),
+            last_successful_query_at=None,
+            last_notified_at=None,
+        ),
     )
+    changes = tuple(compare_snapshots(previous_scope_state.snapshot, current_snapshot))
     normalized_queried_at = required_iso_timestamp(
         queried_at, "last_successful_query_at"
     )
-    normalized_notified_at = optional_iso_timestamp(
-        notified_at, "last_notified_at"
-    )
+    normalized_notified_at = optional_iso_timestamp(notified_at, "last_notified_at")
 
+    grade_queries = dict(previous_state.grade_queries)
+    grade_queries[scope] = PerScopeState(
+        snapshot=current_snapshot,
+        last_successful_query_at=normalized_queried_at,
+        last_notified_at=(
+            previous_scope_state.last_notified_at
+            if normalized_notified_at is None
+            else normalized_notified_at
+        ),
+    )
     next_state = RuntimeState(
         schema_version=previous_state.schema_version,
         session_cookies=dict(previous_state.session_cookies),
         session_updated_at=previous_state.session_updated_at,
-        last_grade_snapshot=current_snapshot,
-        last_successful_query_at=normalized_queried_at,
-        last_notified_at=(
-            previous_state.last_notified_at
-            if normalized_notified_at is None
-            else normalized_notified_at
-        ),
+        grade_queries=grade_queries,
     )
     return GradeQueryResult(
         grades=grade_records,
@@ -81,9 +92,7 @@ def state_with_session(
             if session_updated_at is None
             else session_updated_at
         ),
-        last_grade_snapshot=previous_state.last_grade_snapshot,
-        last_successful_query_at=previous_state.last_successful_query_at,
-        last_notified_at=previous_state.last_notified_at,
+        grade_queries=dict(previous_state.grade_queries),
     )
 
 
@@ -98,6 +107,17 @@ def result_with_details(
         details=details,
         state=result.state,
     )
+
+
+def grade_query_scope_from_config(year: str, semester: str) -> GradeQueryScope:
+    return GradeQueryScope(year=year, semester=semester)
+
+
+def get_grade_query_state(
+    state: RuntimeState,
+    scope: GradeQueryScope,
+) -> PerScopeState | None:
+    return state.grade_queries.get(scope)
 
 
 def required_iso_timestamp(value: object, field_name: str) -> str:
