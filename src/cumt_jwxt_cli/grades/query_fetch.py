@@ -37,15 +37,13 @@ def query_grade_list(config: AppConfig, client: object) -> list[CourseGrade]:
         )
         content_type = ""
         headers = getattr(response, "headers", None)
-        if isinstance(headers, dict):
+        if hasattr(headers, "get"):
             content_type = str(headers.get("content-type", "")).lower()
         status_code = getattr(response, "status_code", None)
         if status_code == 901:
             raise QueryError("JWXT grade list request failed with HTTP 901.")
         if "text/html" in content_type:
-            raise QueryError(
-                "JWXT grade list response looks like an HTML login page."
-            )
+            raise QueryError("JWXT grade list response looks like an HTML login page.")
         return parse_grade_list(response.json())
     except ValueError as exc:
         raise QueryError("JWXT grade list response is not valid JSON.") from exc
@@ -137,7 +135,6 @@ def is_session_query_failure(exc: QueryError) -> bool:
     message = str(exc).lower()
     session_markers = (
         "http 901",
-        "not valid json",
-        "invalid response object",
+        "html login page",
     )
     return any(marker in message for marker in session_markers)

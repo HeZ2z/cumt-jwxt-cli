@@ -1,4 +1,4 @@
-"""Publication helpers for reports, notifications, and optional outputs."""
+"""Publication helpers for exam reports, notifications, and optional outputs."""
 
 from __future__ import annotations
 
@@ -8,20 +8,18 @@ from dataclasses import dataclass
 from datetime import datetime
 
 from cumt_jwxt_cli.errors import StateError
-from cumt_jwxt_cli.grades.query_state import now_iso
-from cumt_jwxt_cli.grades.report import (
+from cumt_jwxt_cli.exams.query_state import now_iso
+from cumt_jwxt_cli.exams.report import (
+    build_exam_text_summary,
     build_html_report,
-    build_text_summary,
     format_term_label,
 )
 from cumt_jwxt_cli.models import (
     AppConfig,
-    CourseGrade,
-    GradeChange,
-    GradeDetail,
-    GradeDetailComponent,
-    GradeQueryResult,
-    GradeSnapshotEntry,
+    ExamChange,
+    ExamInfo,
+    ExamQueryResult,
+    ExamSnapshotEntry,
 )
 from cumt_jwxt_cli.notify.email import send_grade_email
 
@@ -34,22 +32,21 @@ class PublicationArtifacts:
 
 def build_publication_artifacts(
     config: AppConfig,
-    result: GradeQueryResult,
+    result: ExamQueryResult,
     *,
     queried_at: str,
 ) -> PublicationArtifacts:
     return PublicationArtifacts(
-        text_summary=build_text_summary(
-            grades=result.grades,
+        text_summary=build_exam_text_summary(
+            exams=result.exams,
             changes=result.changes,
             year=config.query.year,
             semester=config.query.semester,
             queried_at=queried_at,
         ),
         html_report=build_html_report(
-            grades=result.grades,
+            exams=result.exams,
             changes=result.changes,
-            details=result.details,
             year=config.query.year,
             semester=config.query.semester,
             queried_at=queried_at,
@@ -59,7 +56,7 @@ def build_publication_artifacts(
 
 def maybe_notify(
     config: AppConfig,
-    result: GradeQueryResult,
+    result: ExamQueryResult,
     artifacts: PublicationArtifacts,
     *,
     force_email: bool,
@@ -74,7 +71,7 @@ def maybe_notify(
     send_email(
         config.notify,
         subject=(
-            f"CUMT 成绩报告 "
+            f"CUMT 考试报告 "
             f"{format_term_label(config.query.year, config.query.semester)}"
         ),
         text_body=artifacts.text_summary,
@@ -85,7 +82,7 @@ def maybe_notify(
 
 def save_optional_outputs(
     config: AppConfig,
-    result: GradeQueryResult,
+    result: ExamQueryResult,
     artifacts: PublicationArtifacts,
 ) -> None:
     if not config.output.save_json and not config.output.save_report:
@@ -96,9 +93,9 @@ def save_optional_outputs(
         output_dir.mkdir(parents=True, exist_ok=True)
 
         if config.output.save_json:
-            (output_dir / "grades.json").write_text(
+            (output_dir / "exams.json").write_text(
                 json.dumps(
-                    build_grades_json_payload(result, artifacts.text_summary),
+                    build_exams_json_payload(result, artifacts.text_summary),
                     ensure_ascii=False,
                     indent=2,
                 )
@@ -106,7 +103,7 @@ def save_optional_outputs(
                 encoding="utf-8",
             )
         if config.output.save_report:
-            (output_dir / "grade_report.html").write_text(
+            (output_dir / "exam_report.html").write_text(
                 artifacts.html_report,
                 encoding="utf-8",
             )
@@ -114,71 +111,57 @@ def save_optional_outputs(
         raise StateError(f"Could not save optional outputs: {exc}") from exc
 
 
-def build_grades_json_payload(
-    result: GradeQueryResult,
+def build_exams_json_payload(
+    result: ExamQueryResult,
     text_summary: str,
 ) -> dict[str, object]:
-    """Build the stable public JSON artifact without exposing runtime state."""
-
     return {
-        "grades": [serialize_course_grade(grade) for grade in result.grades],
-        "changes": [serialize_grade_change(change) for change in result.changes],
-        "details": [serialize_grade_detail(detail) for detail in result.details],
+        "exams": [serialize_exam_info(exam) for exam in result.exams],
+        "changes": [serialize_exam_change(change) for change in result.changes],
         "summary": text_summary,
     }
 
 
-def serialize_course_grade(grade: CourseGrade) -> dict[str, str | None]:
+def serialize_exam_info(exam: ExamInfo) -> dict[str, str | None]:
     return {
-        "course_code": grade.course_code,
-        "course_name": grade.course_name,
-        "score": grade.score,
-        "credit": grade.credit,
-        "grade_point": grade.grade_point,
-        "credit_grade_point": grade.credit_grade_point,
-        "course_type": grade.course_type,
-        "exam_type": grade.exam_type,
-        "teacher_name": grade.teacher_name,
-        "teaching_class_id": grade.teaching_class_id,
+        "course_code": exam.course_code,
+        "course_name": exam.course_name,
+        "exam_time": exam.exam_time,
+        "location": exam.location,
+        "campus": exam.campus,
+        "exam_name": exam.exam_name,
+        "exam_method": exam.exam_method,
+        "class_schedule": exam.class_schedule,
+        "teacher_info": exam.teacher_info,
+        "credit": exam.credit,
     }
 
 
-def serialize_grade_change(change: GradeChange) -> dict[str, object]:
+def serialize_exam_change(change: ExamChange) -> dict[str, object]:
     return {
         "change_type": change.change_type,
         "before": (
-            None if change.before is None else serialize_snapshot_entry(change.before)
+            None
+            if change.before is None
+            else serialize_exam_snapshot_entry(change.before)
         ),
         "after": (
-            None if change.after is None else serialize_snapshot_entry(change.after)
+            None
+            if change.after is None
+            else serialize_exam_snapshot_entry(change.after)
         ),
     }
 
 
-def serialize_snapshot_entry(entry: GradeSnapshotEntry) -> dict[str, str]:
+def serialize_exam_snapshot_entry(
+    entry: ExamSnapshotEntry,
+) -> dict[str, str | None]:
     return {
         "course_code": entry.course_code,
         "course_name": entry.course_name,
-        "score": entry.score,
-    }
-
-
-def serialize_grade_detail(detail: GradeDetail) -> dict[str, object]:
-    return {
-        "course_code": detail.course_code,
-        "course_name": detail.course_name,
-        "components": [
-            serialize_grade_detail_component(component)
-            for component in detail.components
-        ],
-    }
-
-
-def serialize_grade_detail_component(
-    component: GradeDetailComponent,
-) -> dict[str, str]:
-    return {
-        "name": component.name,
-        "percentage": component.percentage,
-        "score": component.score,
+        "exam_time": entry.exam_time,
+        "location": entry.location,
+        "campus": entry.campus,
+        "exam_name": entry.exam_name,
+        "exam_method": entry.exam_method,
     }

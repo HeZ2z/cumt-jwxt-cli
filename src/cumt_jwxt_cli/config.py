@@ -54,9 +54,7 @@ _PATH_GRADES_DETAIL_CONCURRENCY = ("grades", "detail_concurrency")
 _ENV_NAME_BY_PATH = {
     _PATH_CUMT_USERNAME: f"{_ENV_PREFIX}USERNAME",
     _PATH_CUMT_PASSWORD: f"{_ENV_PREFIX}PASSWORD",
-    _PATH_CAPTCHA_OPENAI_BASE_URL: (
-        f"{_ENV_PREFIX}CAPTCHA_OPENAI_COMPATIBLE_BASE_URL"
-    ),
+    _PATH_CAPTCHA_OPENAI_BASE_URL: (f"{_ENV_PREFIX}CAPTCHA_OPENAI_COMPATIBLE_BASE_URL"),
     _PATH_CAPTCHA_OPENAI_API_KEY: f"{_ENV_PREFIX}CAPTCHA_OPENAI_COMPATIBLE_API_KEY",
     _PATH_CAPTCHA_OPENAI_MODEL: f"{_ENV_PREFIX}CAPTCHA_OPENAI_COMPATIBLE_MODEL",
     _PATH_NOTIFY_SMTP_HOST: f"{_ENV_PREFIX}SMTP_HOST",
@@ -352,13 +350,13 @@ def _build_logging_config(raw_config: dict[str, Any]) -> LoggingConfig:
 
 def _build_output_config(raw_config: dict[str, Any], args: Namespace) -> OutputConfig:
     return OutputConfig(
-        save_json=bool(args.save_json)
+        save_json=bool(getattr(args, "save_json", False))
         or _get_bool(raw_config, _PATH_OUTPUT_SAVE_JSON, default=False),
-        save_report=bool(args.save_report)
+        save_report=bool(getattr(args, "save_report", False))
         or _get_bool(raw_config, _PATH_OUTPUT_SAVE_REPORT, default=False),
         output_dir=(
-            args.output_dir
-            if args.output_dir is not None
+            getattr(args, "output_dir", None)
+            if getattr(args, "output_dir", None) is not None
             else _get_string(raw_config, _PATH_OUTPUT_DIR, default="")
         ),
     )
