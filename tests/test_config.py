@@ -138,9 +138,7 @@ def test_load_app_config_interactively_creates_missing_config(
     monkeypatch.setattr("sys.stdin.isatty", lambda: True)
     monkeypatch.setattr("builtins.input", lambda prompt: next(answers))
 
-    config = load_app_config(
-        _query_args(config=str(config_path), no_interactive=False)
-    )
+    config = load_app_config(_query_args(config=str(config_path), no_interactive=False))
 
     written = json.loads(config_path.read_text(encoding="utf-8"))
     assert config.cumt.username == "student"
@@ -169,9 +167,7 @@ def test_load_app_config_interactively_completes_missing_fields(
     monkeypatch.setattr("sys.stdin.isatty", lambda: True)
     monkeypatch.setattr("builtins.input", lambda prompt: next(answers))
 
-    config = load_app_config(
-        _query_args(config=str(config_path), no_interactive=False)
-    )
+    config = load_app_config(_query_args(config=str(config_path), no_interactive=False))
 
     written = json.loads(config_path.read_text(encoding="utf-8"))
     assert config.cumt.password == "secret"
@@ -192,9 +188,7 @@ def test_load_app_config_interactive_skips_env_backed_fields(
     monkeypatch.setenv("CUMT_JWXT_USERNAME", "env-user")
     monkeypatch.setenv("CUMT_JWXT_PASSWORD", "env-password")
 
-    config = load_app_config(
-        _query_args(config=str(config_path), no_interactive=False)
-    )
+    config = load_app_config(_query_args(config=str(config_path), no_interactive=False))
 
     written = json.loads(config_path.read_text(encoding="utf-8"))
     assert config.cumt.username == "env-user"

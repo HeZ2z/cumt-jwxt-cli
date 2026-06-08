@@ -80,8 +80,7 @@ def test_build_text_summary_highlights_changes_and_lists_current_grades() -> Non
     assert "[updated] B002 大学英语: 80 -> 88" in summary
     assert (
         "A001 | 高等数学 | 95 | credit=4.0 | grade_point=4.5 | "
-        "credit_grade_point=18.0 | teacher=张老师"
-        in summary
+        "credit_grade_point=18.0 | teacher=张老师" in summary
     )
     assert "B002 | 大学英语 | 88" in summary
 
