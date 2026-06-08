@@ -21,6 +21,7 @@ from cumt_jwxt_cli.grades.query_fetch import (
 )
 from cumt_jwxt_cli.grades.query_state import (
     build_grade_query_result,
+    grade_query_scope_from_config,
     now_iso,
     result_with_details,
     state_with_session,
@@ -50,6 +51,7 @@ def run_grade_query(
     if previous_state is None:
         previous_state = load_runtime_state(config)
     queried_at = now_iso(now_factory)
+    scope = grade_query_scope_from_config(config.query.year, config.query.semester)
     grades = query_grade_list(config, client)
     result = build_grade_query_result(
         grades,
@@ -58,6 +60,7 @@ def run_grade_query(
             session_cookies=session_cookies,
             session_updated_at=session_updated_at,
         ),
+        scope,
         queried_at,
     )
     details = query_grade_details_if_needed(
@@ -88,6 +91,7 @@ def run_grade_query(
                 session_cookies=session_cookies,
                 session_updated_at=session_updated_at,
             ),
+            scope,
             queried_at,
             notified_at=notified_at,
         )

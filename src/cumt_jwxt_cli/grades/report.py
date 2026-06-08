@@ -83,8 +83,9 @@ def build_text_summary(
 ) -> str:
     """Build a plain-text grade summary without writing files."""
 
+    term_label = format_term_label(year, semester)
     lines = [
-        f"CUMT grades {year}-{semester}",
+        f"CUMT 成绩报告 {term_label}",
         f"Queried at: {queried_at}",
         f"Changes: {len(changes)}",
         "",
@@ -116,9 +117,10 @@ def build_html_report(
     grade_map = {grade.course_code: grade for grade in grades}
     credit_summary = _summarize_credits(grades)
     template = _JINJA_ENV.get_template(_TEMPLATE_NAME)
+    term_label = format_term_label(year, semester)
     return template.render(
-        page_title=f"CUMT grades {year}-{semester}",
-        term_label=_format_term_label(year, semester),
+        page_title=f"CUMT 成绩报告 {term_label}",
+        term_label=term_label,
         queried_at=queried_at,
         stats=_build_stats(len(grades), len(changes), credit_summary),
         changes=_build_changes(changes, detail_map, grade_map),
@@ -377,7 +379,7 @@ def _format_decimal(value: Decimal) -> str:
     return format(normalized, "f").rstrip("0").rstrip(".")
 
 
-def _format_term_label(year: str, semester: str) -> str:
+def format_term_label(year: str, semester: str) -> str:
     try:
         next_year = str(int(year) + 1)
     except ValueError:

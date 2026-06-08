@@ -17,6 +17,10 @@ from cumt_jwxt_cli.errors import (
     SnapshotError,
     StateError,
 )
+from cumt_jwxt_cli.grades.query_state import (
+    get_grade_query_state,
+    grade_query_scope_from_config,
+)
 from cumt_jwxt_cli.grades.report import build_text_summary
 from cumt_jwxt_cli.logging_config import configure_logging
 
@@ -125,13 +129,18 @@ def _handle_grades_query(args: argparse.Namespace) -> int:
         print(str(exc), file=sys.stderr)
         return int(ExitCode.UNKNOWN)
 
+    scope = grade_query_scope_from_config(config.query.year, config.query.semester)
+    scope_state = get_grade_query_state(result.state, scope)
+    queried_at = (
+        "" if scope_state is None else scope_state.last_successful_query_at or ""
+    )
     print(
         build_text_summary(
             grades=result.grades,
             changes=result.changes,
             year=config.query.year,
             semester=config.query.semester,
-            queried_at=result.state.last_successful_query_at or "",
+            queried_at=queried_at,
         )
     )
     return int(ExitCode.OK)
