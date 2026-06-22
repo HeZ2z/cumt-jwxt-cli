@@ -24,8 +24,11 @@ def _config() -> SimpleNamespace:
 
 def _runtime_state(**overrides: object) -> SimpleNamespace:
     values = {
+        "schema_version": 4,
         "session_cookies": {},
         "session_updated_at": None,
+        "grade_queries": {},
+        "exam_queries": {},
     }
     values.update(overrides)
     return SimpleNamespace(**values)
@@ -36,6 +39,14 @@ def _query_result() -> SimpleNamespace:
         grades=(),
         changes=(),
         state=SimpleNamespace(last_successful_query_at="2026-05-07T12:00:00+08:00"),
+    )
+
+
+def _exam_query_result() -> SimpleNamespace:
+    return SimpleNamespace(
+        exams=(),
+        changes=(),
+        state=SimpleNamespace(),
     )
 
 
@@ -274,6 +285,85 @@ def test_query_grades_with_session_reuse_retries_once_after_session_expiry(
     ]
 
 
+def test_query_grades_with_session_reuse_retries_once_after_redirect_response(
+    monkeypatch,
+) -> None:
+    previous_state = _runtime_state(
+        session_cookies={"JSESSIONID": "saved"},
+        session_updated_at="2026-05-08T12:00:00+08:00",
+    )
+    login_calls = 0
+    run_calls: list[dict[str, object]] = []
+    reset_calls = 0
+
+    class FakeClient:
+        def __init__(self, **kwargs: object) -> None:
+            self.kwargs = kwargs
+
+        def __enter__(self) -> "FakeClient":
+            return self
+
+        def __exit__(self, *args: object) -> None:
+            return None
+
+        def load_cookies(self, cookies: dict[str, str] | None) -> None:
+            assert cookies == {"JSESSIONID": "saved"}
+
+        def check_reachable(self) -> None:
+            return None
+
+        def export_cookies(self) -> dict[str, str]:
+            return {"JSESSIONID": "renewed"}
+
+        def reset_session(self) -> None:
+            nonlocal reset_calls
+            reset_calls += 1
+
+        def cookies(self) -> dict[str, str]:
+            raise AssertionError("legacy cookies() should not be used")
+
+    monkeypatch.setattr(app_module, "load_runtime_state", lambda config: previous_state)
+    monkeypatch.setattr(app_module, "JWXTClient", FakeClient)
+    monkeypatch.setattr(app_module, "_now_iso", lambda: "2026-05-09T10:00:00+00:00")
+
+    def fake_login(config, client) -> None:
+        nonlocal login_calls
+        login_calls += 1
+
+    def fake_run_grade_query(*args: object, **kwargs: object) -> SimpleNamespace:
+        run_calls.append(kwargs)
+        if len(run_calls) == 1:
+            raise QueryError("JWXT grade list request was redirected with HTTP 302.")
+        return _query_result()
+
+    monkeypatch.setattr(app_module, "_login", fake_login)
+    monkeypatch.setattr(app_module, "run_grade_query", fake_run_grade_query)
+
+    result = app_module.query_grades_with_session_reuse(
+        _config(),
+        force_email=False,
+        trust_env=False,
+    )
+
+    assert result == _query_result()
+    assert login_calls == 1
+    assert reset_calls == 1
+    assert run_calls == [
+        {
+            "previous_state": previous_state,
+            "session_cookies": {"JSESSIONID": "renewed"},
+            "session_updated_at": None,
+            "force_email": False,
+        },
+        {
+            "previous_state": previous_state,
+            "session_cookies": {"JSESSIONID": "renewed"},
+            "session_updated_at": "2026-05-09T10:00:00+00:00",
+            "force_email": False,
+        },
+    ]
+
+
 def test_query_grades_with_session_reuse_does_not_retry_non_session_error(
     monkeypatch,
 ) -> None:
@@ -327,6 +417,260 @@ def test_query_grades_with_session_reuse_does_not_retry_non_session_error(
     with pytest.raises(QueryError, match="retry attempts"):
         app_module.query_grades_with_session_reuse(
             _config(),
+            force_email=False,
+            trust_env=True,
+        )
+
+    assert login_calls == 0
+    assert run_calls == 1
+
+
+def test_query_exams_with_session_reuse_logs_in_when_no_saved_cookies(
+    monkeypatch,
+) -> None:
+    previous_state = _runtime_state()
+    config = _config()
+    login_calls = 0
+    run_calls: list[dict[str, object]] = []
+    session_updated_at = "2026-05-09T10:00:00+00:00"
+
+    class FakeClient:
+        def __init__(self, **kwargs: object) -> None:
+            self.kwargs = kwargs
+
+        def __enter__(self) -> "FakeClient":
+            return self
+
+        def __exit__(self, *args: object) -> None:
+            return None
+
+        def load_cookies(self, cookies: dict[str, str] | None) -> None:
+            assert cookies == {}
+
+        def check_reachable(self) -> None:
+            return None
+
+        def export_cookies(self) -> dict[str, str]:
+            return {"JSESSIONID": "new", "route": "node"}
+
+        def reset_session(self) -> None:
+            raise AssertionError("reset_session should not be needed")
+
+    monkeypatch.setattr(app_module, "load_runtime_state", lambda _cfg: previous_state)
+    monkeypatch.setattr(app_module, "JWXTClient", FakeClient)
+    monkeypatch.setattr(app_module, "_now_iso", lambda: session_updated_at)
+
+    def fake_login(_cfg, _client) -> None:
+        nonlocal login_calls
+        login_calls += 1
+
+    def fake_run_exam_query(*args: object, **kwargs: object) -> SimpleNamespace:
+        run_calls.append(kwargs)
+        return _exam_query_result()
+
+    monkeypatch.setattr(app_module, "_login", fake_login)
+    monkeypatch.setattr(app_module, "run_exam_query", fake_run_exam_query)
+
+    result = app_module.query_exams_with_session_reuse(
+        config,
+        force_email=False,
+        trust_env=True,
+    )
+
+    assert result is not None
+    assert login_calls == 1
+    assert run_calls == [
+        {
+            "previous_state": previous_state,
+            "session_cookies": {"JSESSIONID": "new", "route": "node"},
+            "session_updated_at": session_updated_at,
+            "force_email": False,
+        }
+    ]
+
+
+def test_query_exams_with_session_reuse_reuses_saved_cookies_without_login(
+    monkeypatch,
+) -> None:
+    previous_state = _runtime_state(
+        session_cookies={"JSESSIONID": "saved"},
+        session_updated_at="2026-05-08T12:00:00+08:00",
+    )
+    config = _config()
+    login_calls = 0
+    run_calls: list[dict[str, object]] = []
+
+    class FakeClient:
+        def __init__(self, **kwargs: object) -> None:
+            self.kwargs = kwargs
+
+        def __enter__(self) -> "FakeClient":
+            return self
+
+        def __exit__(self, *args: object) -> None:
+            return None
+
+        def load_cookies(self, cookies: dict[str, str] | None) -> None:
+            assert cookies == {"JSESSIONID": "saved"}
+
+        def check_reachable(self) -> None:
+            return None
+
+        def export_cookies(self) -> dict[str, str]:
+            return {"JSESSIONID": "saved"}
+
+        def reset_session(self) -> None:
+            raise AssertionError("reset_session should not be needed")
+
+    monkeypatch.setattr(app_module, "load_runtime_state", lambda _cfg: previous_state)
+    monkeypatch.setattr(app_module, "JWXTClient", FakeClient)
+
+    def fake_login(_cfg, _client) -> None:
+        nonlocal login_calls
+        login_calls += 1
+
+    def fake_run_exam_query(*args: object, **kwargs: object) -> SimpleNamespace:
+        run_calls.append(kwargs)
+        return _exam_query_result()
+
+    monkeypatch.setattr(app_module, "_login", fake_login)
+    monkeypatch.setattr(app_module, "run_exam_query", fake_run_exam_query)
+
+    result = app_module.query_exams_with_session_reuse(
+        config,
+        force_email=True,
+        trust_env=False,
+    )
+
+    assert result is not None
+    assert login_calls == 0
+    assert run_calls == [
+        {
+            "previous_state": previous_state,
+            "session_cookies": {"JSESSIONID": "saved"},
+            "session_updated_at": None,
+            "force_email": True,
+        }
+    ]
+
+
+def test_query_exams_with_session_reuse_retries_once_after_session_expiry(
+    monkeypatch,
+) -> None:
+    previous_state = _runtime_state(
+        session_cookies={"JSESSIONID": "saved"},
+        session_updated_at="2026-05-08T12:00:00+08:00",
+    )
+    config = _config()
+    login_calls = 0
+    reset_calls = 0
+    run_calls: list[dict[str, object]] = []
+
+    class FakeClient:
+        def __init__(self, **kwargs: object) -> None:
+            self.kwargs = kwargs
+
+        def __enter__(self) -> "FakeClient":
+            return self
+
+        def __exit__(self, *args: object) -> None:
+            return None
+
+        def load_cookies(self, cookies: dict[str, str] | None) -> None:
+            assert cookies == {"JSESSIONID": "saved"}
+
+        def check_reachable(self) -> None:
+            return None
+
+        def export_cookies(self) -> dict[str, str]:
+            return {"JSESSIONID": "renewed"}
+
+        def reset_session(self) -> None:
+            nonlocal reset_calls
+            reset_calls += 1
+
+    monkeypatch.setattr(app_module, "load_runtime_state", lambda _cfg: previous_state)
+    monkeypatch.setattr(app_module, "JWXTClient", FakeClient)
+    monkeypatch.setattr(app_module, "_now_iso", lambda: "2026-05-09T10:00:00+00:00")
+
+    def fake_login(_cfg, _client) -> None:
+        nonlocal login_calls
+        login_calls += 1
+
+    def fake_run_exam_query(*args: object, **kwargs: object) -> SimpleNamespace:
+        run_calls.append(kwargs)
+        if len(run_calls) == 1:
+            raise QueryError("JWXT exam list request failed with HTTP 901.")
+        return _exam_query_result()
+
+    monkeypatch.setattr(app_module, "_login", fake_login)
+    monkeypatch.setattr(app_module, "run_exam_query", fake_run_exam_query)
+
+    result = app_module.query_exams_with_session_reuse(
+        config,
+        force_email=False,
+        trust_env=False,
+    )
+
+    assert result is not None
+    assert len(run_calls) == 2
+    assert login_calls == 1
+    assert reset_calls == 1
+    assert run_calls[0]["session_updated_at"] is None
+    assert run_calls[1]["session_updated_at"] == "2026-05-09T10:00:00+00:00"
+
+
+def test_query_exams_with_session_reuse_does_not_retry_non_session_error(
+    monkeypatch,
+) -> None:
+    previous_state = _runtime_state(
+        session_cookies={"JSESSIONID": "saved"},
+        session_updated_at="2026-05-08T12:00:00+08:00",
+    )
+    config = _config()
+    login_calls = 0
+    run_calls = 0
+
+    class FakeClient:
+        def __init__(self, **kwargs: object) -> None:
+            self.kwargs = kwargs
+
+        def __enter__(self) -> "FakeClient":
+            return self
+
+        def __exit__(self, *args: object) -> None:
+            return None
+
+        def load_cookies(self, cookies: dict[str, str] | None) -> None:
+            assert cookies == {"JSESSIONID": "saved"}
+
+        def check_reachable(self) -> None:
+            return None
+
+        def export_cookies(self) -> dict[str, str]:
+            return {"JSESSIONID": "saved"}
+
+        def reset_session(self) -> None:
+            raise AssertionError("reset_session should not be needed")
+
+    monkeypatch.setattr(app_module, "load_runtime_state", lambda _cfg: previous_state)
+    monkeypatch.setattr(app_module, "JWXTClient", FakeClient)
+
+    def fake_login(_cfg, _client) -> None:
+        nonlocal login_calls
+        login_calls += 1
+
+    def fake_run_exam_query(*args: object, **kwargs: object) -> SimpleNamespace:
+        nonlocal run_calls
+        run_calls += 1
+        raise QueryError("JWXT request failed after retry attempts.")
+
+    monkeypatch.setattr(app_module, "_login", fake_login)
+    monkeypatch.setattr(app_module, "run_exam_query", fake_run_exam_query)
+
+    with pytest.raises(QueryError, match="retry attempts"):
+        app_module.query_exams_with_session_reuse(
+            config,
             force_email=False,
             trust_env=True,
         )

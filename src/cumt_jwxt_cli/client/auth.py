@@ -29,40 +29,60 @@ def login(
     client: object,
     *,
     recognize_captcha: Callable[[bytes, AppConfig], str],
+    max_captcha_attempts: int = 3,
 ) -> dict[str, str]:
-    """Log in to JWXT and return a serializable cookie snapshot when available."""
+    """Log in to JWXT and return a serializable cookie snapshot when available.
 
-    timestamp_ms = int(time.time() * 1000)
+    Retries up to *max_captcha_attempts* times on captcha recognition or
+    login-submission failure, fetching a fresh captcha image each attempt.
+    """
+
     clear_cookies = getattr(client, "clear_cookies", None)
-    if callable(clear_cookies):
-        clear_cookies()
+    last_error: Exception | None = None
 
-    login_response = client.get(LOGIN_PATH)
-    csrf_token = extract_csrf_token(login_response.text)
+    for _ in range(max_captcha_attempts):
+        if callable(clear_cookies):
+            clear_cookies()
 
-    captcha_response = client.get(f"/kaptcha?time={timestamp_ms}")
-    captcha_code = recognize_captcha(captcha_response.content, config).strip()
-    if not captcha_code:
-        raise CaptchaError("Captcha recognition returned an empty code.")
+        try:
+            timestamp_ms = int(time.time() * 1000)
+            login_response = client.get(LOGIN_PATH)
+            csrf_token = extract_csrf_token(login_response.text)
 
-    response = client.post(
-        LOGIN_PATH,
-        data={
-            "csrftoken": csrf_token,
-            "language": "zh_CN",
-            "ydType": "",
-            "yhm": config.cumt.username,
-            "mm": config.cumt.password,
-            "yzm": captcha_code,
-        },
-    )
-    if not _looks_logged_in(response):
-        raise AuthError("JWXT login failed; credentials or captcha may be invalid.")
+            captcha_response = client.get(f"/kaptcha?time={timestamp_ms}")
+            captcha_code = recognize_captcha(captcha_response.content, config).strip()
+            if not captcha_code:
+                raise CaptchaError("Captcha recognition returned an empty code.")
 
-    cookies = getattr(client, "cookies", None)
-    if callable(cookies):
-        return cookies()
-    return {}
+            response = client.post(
+                LOGIN_PATH,
+                data={
+                    "csrftoken": csrf_token,
+                    "language": "zh_CN",
+                    "ydType": "",
+                    "yhm": config.cumt.username,
+                    "mm": config.cumt.password,
+                    "yzm": captcha_code,
+                },
+            )
+            if _looks_logged_in(response):
+                cookies = getattr(client, "cookies", None)
+                if callable(cookies):
+                    return cookies()
+                return {}
+
+            last_error = AuthError(
+                "JWXT login failed; credentials or captcha may be invalid."
+            )
+        except AuthError:
+            raise
+        except CaptchaError as exc:
+            last_error = exc
+
+    raise AuthError(
+        "JWXT login failed after multiple attempts; "
+        "credentials or captcha may be invalid."
+    ) from last_error
 
 
 def _looks_logged_in(response: object) -> bool:

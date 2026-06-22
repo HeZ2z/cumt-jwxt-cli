@@ -9,6 +9,8 @@ from typing import Any
 from cumt_jwxt_cli.errors import StateError
 from cumt_jwxt_cli.models import (
     AppConfig,
+    ExamScopeState,
+    ExamSnapshotEntry,
     GradeQueryScope,
     GradeSnapshotEntry,
     PerScopeState,
@@ -16,8 +18,15 @@ from cumt_jwxt_cli.models import (
 )
 from cumt_jwxt_cli.time_utils import normalize_optional_iso_timestamp
 
-_SCHEMA_VERSION = 3
+_SCHEMA_VERSION = 4
 _ALLOWED_KEYS = {
+    "schema_version",
+    "session_cookies",
+    "session_updated_at",
+    "grade_queries",
+    "exam_queries",
+}
+_V3_ALLOWED_KEYS = {
     "schema_version",
     "session_cookies",
     "session_updated_at",
@@ -55,7 +64,7 @@ def load_runtime_state(config: AppConfig) -> RuntimeState:
         raise StateError(f"Unable to read state file: {state_path}") from exc
 
     state = _deserialize_runtime_state(payload)
-    if payload["schema_version"] in {1, 2}:
+    if payload["schema_version"] in {1, 2, 3}:
         save_runtime_state(config, state)
     return state
 
@@ -92,6 +101,8 @@ def _deserialize_runtime_state(payload: Any) -> RuntimeState:
         allowed_keys = _V1_ALLOWED_KEYS
     elif schema_version == 2:
         allowed_keys = _V2_ALLOWED_KEYS
+    elif schema_version == 3:
+        allowed_keys = _V3_ALLOWED_KEYS
     else:
         allowed_keys = _ALLOWED_KEYS
     if set(payload) != allowed_keys:
@@ -112,11 +123,34 @@ def _deserialize_runtime_state(payload: Any) -> RuntimeState:
                 payload.get("session_updated_at"), "session_updated_at"
             ),
             grade_queries={},
+            exam_queries={},
         )
 
     grade_queries_payload = payload["grade_queries"]
     if not isinstance(grade_queries_payload, dict):
         raise StateError("State field grade_queries must be an object.")
+
+    grade_queries = {
+        _deserialize_scope_key(scope_key): _deserialize_per_scope_state(
+            scope_payload, scope_key
+        )
+        for scope_key, scope_payload in grade_queries_payload.items()
+    }
+
+    if schema_version == 3:
+        return RuntimeState(
+            schema_version=_SCHEMA_VERSION,
+            session_cookies=_deserialize_session_cookies(payload["session_cookies"]),
+            session_updated_at=_normalize_state_timestamp(
+                payload["session_updated_at"], "session_updated_at"
+            ),
+            grade_queries=grade_queries,
+            exam_queries={},
+        )
+
+    exam_queries_payload = payload["exam_queries"]
+    if not isinstance(exam_queries_payload, dict):
+        raise StateError("State field exam_queries must be an object.")
 
     return RuntimeState(
         schema_version=_SCHEMA_VERSION,
@@ -124,11 +158,12 @@ def _deserialize_runtime_state(payload: Any) -> RuntimeState:
         session_updated_at=_normalize_state_timestamp(
             payload["session_updated_at"], "session_updated_at"
         ),
-        grade_queries={
-            _deserialize_scope_key(scope_key): _deserialize_per_scope_state(
+        grade_queries=grade_queries,
+        exam_queries={
+            _deserialize_scope_key(scope_key): _deserialize_exam_scope_state(
                 scope_payload, scope_key
             )
-            for scope_key, scope_payload in grade_queries_payload.items()
+            for scope_key, scope_payload in exam_queries_payload.items()
         },
     )
 
@@ -136,10 +171,10 @@ def _deserialize_runtime_state(payload: Any) -> RuntimeState:
 def _validate_schema_version(value: Any) -> int:
     if isinstance(value, bool) or not isinstance(value, int):
         raise StateError("State field schema_version must be an integer.")
-    if value not in {1, 2, _SCHEMA_VERSION}:
+    if value not in {1, 2, 3, _SCHEMA_VERSION}:
         raise StateError(
             "Unsupported state schema_version "
-            f"{value}; expected 1, 2, or {_SCHEMA_VERSION}."
+            f"{value}; expected 1, 2, 3, or {_SCHEMA_VERSION}."
         )
     return value
 
@@ -150,6 +185,7 @@ def _empty_runtime_state() -> RuntimeState:
         session_cookies={},
         session_updated_at=None,
         grade_queries={},
+        exam_queries={},
     )
 
 
@@ -239,6 +275,65 @@ def _deserialize_per_scope_state(payload: Any, scope_key: str) -> PerScopeState:
     )
 
 
+def _deserialize_exam_snapshot_entry(payload: Any, index: int) -> ExamSnapshotEntry:
+    if not isinstance(payload, dict):
+        raise StateError(f"State exam snapshot entry {index} must be an object.")
+    if set(payload) != {
+        "course_code",
+        "course_name",
+        "exam_time",
+        "location",
+        "campus",
+        "exam_name",
+        "exam_method",
+    }:
+        raise StateError(
+            f"State exam snapshot entry {index} must contain only supported keys."
+        )
+
+    return ExamSnapshotEntry(
+        course_code=_required_state_string(
+            payload["course_code"], "course_code", index
+        ),
+        course_name=_required_state_string(
+            payload["course_name"], "course_name", index
+        ),
+        exam_time=_optional_state_string(payload["exam_time"], "exam_time", index),
+        location=_optional_state_string(payload["location"], "location", index),
+        campus=_optional_state_string(payload["campus"], "campus", index),
+        exam_name=_optional_state_string(payload["exam_name"], "exam_name", index),
+        exam_method=_optional_state_string(
+            payload["exam_method"], "exam_method", index
+        ),
+    )
+
+
+def _deserialize_exam_scope_state(payload: Any, scope_key: str) -> ExamScopeState:
+    if not isinstance(payload, dict):
+        raise StateError(f"State exam query {scope_key} must be an object.")
+    if set(payload) != {"snapshot", "last_successful_query_at", "last_notified_at"}:
+        raise StateError(
+            f"State exam query {scope_key} must contain only supported keys."
+        )
+    snapshot_payload = payload["snapshot"]
+    if not isinstance(snapshot_payload, list):
+        raise StateError(f"State exam query {scope_key} snapshot must be a list.")
+    return ExamScopeState(
+        snapshot=tuple(
+            _deserialize_exam_snapshot_entry(entry, index)
+            for index, entry in enumerate(snapshot_payload)
+        ),
+        last_successful_query_at=_normalize_state_timestamp(
+            payload["last_successful_query_at"],
+            f"exam_queries.{scope_key}.last_successful_query_at",
+        ),
+        last_notified_at=_normalize_state_timestamp(
+            payload["last_notified_at"],
+            f"exam_queries.{scope_key}.last_notified_at",
+        ),
+    )
+
+
 def _required_state_string(value: Any, field_name: str, index: int) -> str:
     if not isinstance(value, str):
         raise StateError(
@@ -250,6 +345,17 @@ def _required_state_string(value: Any, field_name: str, index: int) -> str:
             f"State snapshot entry {index} field {field_name} must not be blank."
         )
     return stripped
+
+
+def _optional_state_string(value: Any, field_name: str, index: int) -> str | None:
+    if value is None:
+        return None
+    if not isinstance(value, str):
+        raise StateError(
+            f"State snapshot entry {index} field {field_name} must be a string or null."
+        )
+    stripped = value.strip()
+    return stripped or None
 
 
 def _normalize_state_timestamp(value: Any, field_name: str) -> str | None:
@@ -296,6 +402,35 @@ def _serialize_runtime_state(state: RuntimeState) -> dict[str, object]:
             }
             for scope, per_scope_state in sorted(
                 state.grade_queries.items(),
+                key=lambda item: _serialize_scope_key(item[0]),
+            )
+        },
+        "exam_queries": {
+            _serialize_scope_key(scope): {
+                "snapshot": [
+                    {
+                        "course_code": entry.course_code,
+                        "course_name": entry.course_name,
+                        "exam_time": entry.exam_time,
+                        "location": entry.location,
+                        "campus": entry.campus,
+                        "exam_name": entry.exam_name,
+                        "exam_method": entry.exam_method,
+                    }
+                    for entry in per_scope_state.snapshot
+                ],
+                "last_successful_query_at": _normalize_state_timestamp(
+                    per_scope_state.last_successful_query_at,
+                    f"exam_queries.{_serialize_scope_key(scope)}."
+                    "last_successful_query_at",
+                ),
+                "last_notified_at": _normalize_state_timestamp(
+                    per_scope_state.last_notified_at,
+                    f"exam_queries.{_serialize_scope_key(scope)}.last_notified_at",
+                ),
+            }
+            for scope, per_scope_state in sorted(
+                state.exam_queries.items(),
                 key=lambda item: _serialize_scope_key(item[0]),
             )
         },

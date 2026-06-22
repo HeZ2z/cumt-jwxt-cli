@@ -83,6 +83,7 @@ class OutputConfig:
 
     save_json: bool
     save_report: bool
+    save_ics: bool
     output_dir: str
 
     def resolve_dir(self, config_path: Path) -> Path:
@@ -151,6 +152,28 @@ class PerScopeState:
 
 
 @dataclass(frozen=True)
+class ExamSnapshotEntry:
+    """Minimal exam record stored for change detection."""
+
+    course_code: str
+    course_name: str
+    exam_time: str | None
+    location: str | None
+    campus: str | None
+    exam_name: str | None
+    exam_method: str | None
+
+
+@dataclass(frozen=True)
+class ExamScopeState:
+    """Persisted exam state for one query scope."""
+
+    snapshot: tuple[ExamSnapshotEntry, ...]
+    last_successful_query_at: str | None
+    last_notified_at: str | None
+
+
+@dataclass(frozen=True)
 class GradeChange:
     """Structured difference between two grade snapshots."""
 
@@ -185,6 +208,42 @@ class RuntimeState:
     session_cookies: dict[str, str]
     session_updated_at: str | None
     grade_queries: dict[GradeQueryScope, PerScopeState]
+    exam_queries: dict[GradeQueryScope, ExamScopeState]
+
+
+@dataclass(frozen=True)
+class ExamInfo:
+    """Parsed exam schedule record."""
+
+    course_code: str
+    course_name: str
+    exam_time: str | None = None
+    location: str | None = None
+    campus: str | None = None
+    exam_name: str | None = None
+    exam_method: str | None = None
+    class_schedule: str | None = None
+    teacher_info: str | None = None
+    credit: str | None = None
+
+
+@dataclass(frozen=True)
+class ExamChange:
+    """Structured difference between two exam snapshots."""
+
+    change_type: Literal["added", "updated", "removed"]
+    before: ExamSnapshotEntry | None
+    after: ExamSnapshotEntry | None
+
+
+@dataclass(frozen=True)
+class ExamQueryResult:
+    """Pure business result for a completed exam query workflow."""
+
+    exams: tuple[ExamInfo, ...]
+    snapshot: tuple[ExamSnapshotEntry, ...]
+    changes: tuple[ExamChange, ...]
+    state: RuntimeState
 
 
 @dataclass(frozen=True)

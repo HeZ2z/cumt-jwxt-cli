@@ -8,7 +8,13 @@ import pytest
 import cumt_jwxt_cli.cli as cli_module
 from cumt_jwxt_cli.cli import build_parser, main
 from cumt_jwxt_cli.errors import ExitCode
-from cumt_jwxt_cli.models import GradeQueryScope, PerScopeState
+from cumt_jwxt_cli.models import (
+    ExamInfo,
+    ExamScopeState,
+    GradeQueryScope,
+    PerScopeState,
+    RuntimeState,
+)
 
 
 def _empty_query_result() -> SimpleNamespace:
@@ -22,7 +28,42 @@ def _empty_query_result() -> SimpleNamespace:
                     last_successful_query_at="2026-05-07T12:00:00+08:00",
                     last_notified_at=None,
                 )
-            }
+            },
+            exam_queries={},
+        ),
+    )
+
+
+def _empty_exam_query_result() -> SimpleNamespace:
+    return SimpleNamespace(
+        exams=(),
+        changes=(),
+        state=RuntimeState(
+            schema_version=4,
+            session_cookies={},
+            session_updated_at=None,
+            grade_queries={},
+            exam_queries={
+                GradeQueryScope(year="2025", semester="12"): ExamScopeState(
+                    snapshot=(),
+                    last_successful_query_at="2026-06-01T12:00:00+08:00",
+                    last_notified_at=None,
+                )
+            },
+        ),
+    )
+
+
+def _sample_exams() -> tuple[ExamInfo, ...]:
+    return (
+        ExamInfo(
+            course_code="M08209",
+            course_name="嵌入式系统设计与应用",
+            exam_time="2026-05-06(16:15-17:55)",
+            location="博2-B102",
+            campus="南湖校区",
+            exam_name="2025-2026-2课程考试",
+            exam_method="考试",
         ),
     )
 
@@ -260,6 +301,182 @@ def test_main_maps_runtime_errors_to_exit_codes(
     )
 
     exit_code = main(["grades", "query", "--config", str(config_path)])
+    captured = capsys.readouterr()
+
+    assert exit_code == int(expected_code)
+    assert str(raised) in captured.err
+
+
+# -- exams ----------------------------------------------------------------
+
+
+def test_build_parser_parses_exams_query() -> None:
+    parser = build_parser()
+
+    args = parser.parse_args(["exams", "query"])
+
+    assert args.command == "exams"
+    assert args.exams_command == "query"
+
+
+def test_exams_query_parses_key_arguments() -> None:
+    parser = build_parser()
+
+    args = parser.parse_args(
+        [
+            "exams",
+            "query",
+            "--config",
+            "config.test.json",
+            "--year",
+            "2025",
+            "--semester",
+            "12",
+            "--force-email",
+            "--no-proxy",
+            "--no-interactive",
+            "--save-json",
+            "--save-report",
+            "--save-ics",
+            "--output-dir",
+            "./out",
+            "--verbose",
+        ]
+    )
+
+    assert args.config == "config.test.json"
+    assert args.year == "2025"
+    assert args.semester == "12"
+    assert args.force_email is True
+    assert args.no_proxy is True
+    assert args.no_interactive is True
+    assert args.save_json is True
+    assert args.save_report is True
+    assert args.save_ics is True
+    assert args.output_dir == "./out"
+    assert args.verbose is True
+
+
+def test_main_shows_help_for_exams_command(capsys) -> None:
+    exit_code = main(["exams"])
+
+    captured = capsys.readouterr()
+
+    assert exit_code == int(ExitCode.OK)
+    assert "usage: cumt-jwxt exams" in captured.out
+    assert captured.err == ""
+
+
+def test_main_runs_exams_query_workflow(capsys, tmp_path, monkeypatch) -> None:
+    config_path = tmp_path / "config.local.json"
+    config_path.write_text(
+        json.dumps(
+            {
+                "cumt": {"username": "student", "password": "secret"},
+                "query": {"year": "2025", "semester": "12"},
+                "notify": {"enabled": False},
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    monkeypatch.setattr(cli_module, "configure_logging", lambda **kwargs: None)
+    monkeypatch.setattr(
+        cli_module,
+        "query_exams_with_session_reuse",
+        lambda config, *, force_email, trust_env: _empty_exam_query_result(),
+    )
+
+    exit_code = main(["exams", "query", "--config", str(config_path)])
+
+    captured = capsys.readouterr()
+
+    assert exit_code == int(ExitCode.OK)
+    assert "CUMT exams 2025-2026 第二学期" in captured.out
+    assert captured.err == ""
+
+
+def test_exams_query_no_proxy(capsys, tmp_path, monkeypatch) -> None:
+    config_path = tmp_path / "config.local.json"
+    config_path.write_text(
+        json.dumps(
+            {
+                "cumt": {"username": "student", "password": "secret"},
+                "query": {"year": "2025", "semester": "12"},
+            }
+        ),
+        encoding="utf-8",
+    )
+    calls: list[dict[str, object]] = []
+
+    monkeypatch.setattr(cli_module, "configure_logging", lambda **kwargs: None)
+
+    def fake_query_exams(
+        config: object,
+        *,
+        force_email: bool,
+        trust_env: bool,
+    ) -> SimpleNamespace:
+        calls.append({"force_email": force_email, "trust_env": trust_env})
+        return _empty_exam_query_result()
+
+    monkeypatch.setattr(
+        cli_module,
+        "query_exams_with_session_reuse",
+        fake_query_exams,
+    )
+
+    main(["exams", "query", "--config", str(config_path), "--no-proxy"])
+
+    assert calls == [{"force_email": False, "trust_env": False}]
+
+
+@pytest.mark.parametrize(
+    ("raised", "expected_code"),
+    [
+        (cli_module.AuthError("auth"), ExitCode.AUTH_ERROR),
+        (cli_module.QueryError("query"), ExitCode.QUERY_ERROR),
+        (cli_module.ParseError("parse"), ExitCode.PARSE_ERROR),
+        (cli_module.NotifyError("notify"), ExitCode.NOTIFY_ERROR),
+        (cli_module.StateError("state"), ExitCode.UNKNOWN),
+        (cli_module.SnapshotError("snapshot"), ExitCode.UNKNOWN),
+    ],
+)
+def test_exams_query_maps_runtime_errors_to_exit_codes(
+    capsys,
+    tmp_path,
+    monkeypatch,
+    raised: Exception,
+    expected_code: ExitCode,
+) -> None:
+    config_path = tmp_path / "config.local.json"
+    config_path.write_text(
+        json.dumps(
+            {
+                "cumt": {"username": "student", "password": "secret"},
+                "query": {"year": "2025", "semester": "12"},
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    monkeypatch.setattr(cli_module, "configure_logging", lambda **kwargs: None)
+
+    def raise_runtime_error(
+        config: object,
+        *,
+        force_email: bool,
+        trust_env: bool,
+    ) -> None:
+        raise raised
+
+    monkeypatch.setattr(
+        cli_module,
+        "query_exams_with_session_reuse",
+        raise_runtime_error,
+    )
+
+    exit_code = main(["exams", "query", "--config", str(config_path)])
     captured = capsys.readouterr()
 
     assert exit_code == int(expected_code)

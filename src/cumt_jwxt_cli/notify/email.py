@@ -12,16 +12,20 @@ from cumt_jwxt_cli.errors import NotifyError
 from cumt_jwxt_cli.models import NotifyConfig
 
 
-def send_grade_email(
+def send_email(
     config: NotifyConfig,
     *,
     subject: str,
     text_body: str,
     html_body: str,
+    attachments: list[tuple[str, bytes, str]] | None = None,
     smtp_factory: Callable[..., object] = smtplib.SMTP_SSL,
     timeout_seconds: float = 30.0,
 ) -> None:
-    """Send a grade notification email when notification is enabled."""
+    """Send a notification email when notification is enabled.
+
+    attachments: list of (filename, content_bytes, mime_type)
+    """
 
     if not config.enabled:
         return
@@ -37,6 +41,13 @@ def send_grade_email(
     message["To"] = ", ".join(config.recipients)
     message.set_content(text_body)
     message.add_alternative(html_body, subtype="html")
+
+    if attachments:
+        for filename, content, mime_type in attachments:
+            maintype, _, subtype = mime_type.partition("/")
+            message.add_attachment(
+                content, maintype=maintype, subtype=subtype, filename=filename
+            )
 
     try:
         with smtp_factory(

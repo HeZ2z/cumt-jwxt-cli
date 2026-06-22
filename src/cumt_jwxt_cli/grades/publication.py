@@ -7,6 +7,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime
 
+from cumt_jwxt_cli.errors import StateError
 from cumt_jwxt_cli.grades.query_state import now_iso
 from cumt_jwxt_cli.grades.report import (
     build_html_report,
@@ -22,7 +23,8 @@ from cumt_jwxt_cli.models import (
     GradeQueryResult,
     GradeSnapshotEntry,
 )
-from cumt_jwxt_cli.notify.email import send_grade_email
+from cumt_jwxt_cli.notify.email import send_email
+from cumt_jwxt_cli.output_naming import short_year_semester
 
 
 @dataclass(frozen=True)
@@ -63,14 +65,14 @@ def maybe_notify(
     *,
     force_email: bool,
     now_factory: Callable[[], datetime] | None = None,
-    send_email: Callable[..., None] = send_grade_email,
+    send_email_fn: Callable[..., None] = send_email,
 ) -> str | None:
     should_notify = bool(result.changes) or force_email
     if not config.notify.enabled or not should_notify:
         return None
 
     notified_at = now_iso(now_factory)
-    send_email(
+    send_email_fn(
         config.notify,
         subject=(
             f"CUMT 成绩报告 "
@@ -90,24 +92,29 @@ def save_optional_outputs(
     if not config.output.save_json and not config.output.save_report:
         return
 
-    output_dir = config.output.resolve_dir(config.config_path)
-    output_dir.mkdir(parents=True, exist_ok=True)
+    try:
+        output_dir = config.output.resolve_dir(config.config_path)
+        output_dir.mkdir(parents=True, exist_ok=True)
 
-    if config.output.save_json:
-        (output_dir / "grades.json").write_text(
-            json.dumps(
-                build_grades_json_payload(result, artifacts.text_summary),
-                ensure_ascii=False,
-                indent=2,
+        suffix = short_year_semester(config.query.year, config.query.semester)
+
+        if config.output.save_json:
+            (output_dir / f"grades_{suffix}.json").write_text(
+                json.dumps(
+                    build_grades_json_payload(result, artifacts.text_summary),
+                    ensure_ascii=False,
+                    indent=2,
+                )
+                + "\n",
+                encoding="utf-8",
             )
-            + "\n",
-            encoding="utf-8",
-        )
-    if config.output.save_report:
-        (output_dir / "grade_report.html").write_text(
-            artifacts.html_report,
-            encoding="utf-8",
-        )
+        if config.output.save_report:
+            (output_dir / f"grade_report_{suffix}.html").write_text(
+                artifacts.html_report,
+                encoding="utf-8",
+            )
+    except OSError as exc:
+        raise StateError(f"Could not save optional outputs: {exc}") from exc
 
 
 def build_grades_json_payload(

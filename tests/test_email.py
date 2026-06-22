@@ -7,7 +7,7 @@ import pytest
 
 from cumt_jwxt_cli.errors import NotifyError
 from cumt_jwxt_cli.models import NotifyConfig
-from cumt_jwxt_cli.notify.email import send_grade_email
+from cumt_jwxt_cli.notify.email import send_email
 
 
 class _SMTP:
@@ -49,10 +49,10 @@ def _config(**overrides: object) -> NotifyConfig:
     return NotifyConfig(**values)
 
 
-def test_send_grade_email_sends_html_message() -> None:
+def test_send_email_sends_html_message() -> None:
     _SMTP.instances.clear()
 
-    send_grade_email(
+    send_email(
         _config(),
         subject="Grades changed",
         text_body="plain",
@@ -66,10 +66,10 @@ def test_send_grade_email_sends_html_message() -> None:
     assert len(smtp.messages) == 1
 
 
-def test_send_grade_email_uses_sender_display_name_when_configured() -> None:
+def test_send_email_uses_sender_display_name_when_configured() -> None:
     _SMTP.instances.clear()
 
-    send_grade_email(
+    send_email(
         _config(sender_name="cumt-jwxt-cli"),
         subject="Grades changed",
         text_body="plain",
@@ -82,10 +82,10 @@ def test_send_grade_email_uses_sender_display_name_when_configured() -> None:
     assert message["From"] == "cumt-jwxt-cli <sender@example.test>"
 
 
-def test_send_grade_email_skips_disabled_notify() -> None:
+def test_send_email_skips_disabled_notify() -> None:
     _SMTP.instances.clear()
 
-    send_grade_email(
+    send_email(
         _config(enabled=False),
         subject="Grades changed",
         text_body="plain",
@@ -96,9 +96,9 @@ def test_send_grade_email_skips_disabled_notify() -> None:
     assert _SMTP.instances == []
 
 
-def test_send_grade_email_rejects_incomplete_config() -> None:
+def test_send_email_rejects_incomplete_config() -> None:
     with pytest.raises(NotifyError, match="notify.smtp_host"):
-        send_grade_email(
+        send_email(
             _config(smtp_host=""),
             subject="Grades changed",
             text_body="plain",
@@ -107,13 +107,13 @@ def test_send_grade_email_rejects_incomplete_config() -> None:
         )
 
 
-def test_send_grade_email_reports_smtp_authentication_failure() -> None:
+def test_send_email_reports_smtp_authentication_failure() -> None:
     class AuthFailedSMTP(_SMTP):
         def login(self, username: str, password: str) -> None:
             raise smtplib.SMTPAuthenticationError(535, b"auth failed")
 
     with pytest.raises(NotifyError, match="SMTP authentication failed"):
-        send_grade_email(
+        send_email(
             _config(),
             subject="Grades changed",
             text_body="plain",
@@ -122,12 +122,12 @@ def test_send_grade_email_reports_smtp_authentication_failure() -> None:
         )
 
 
-def test_send_grade_email_reports_smtp_connection_failure() -> None:
+def test_send_email_reports_smtp_connection_failure() -> None:
     def fail_connect(host: str, port: int, timeout: float) -> object:
         raise TimeoutError("connect timed out")
 
     with pytest.raises(NotifyError, match="SMTP connection failed"):
-        send_grade_email(
+        send_email(
             _config(),
             subject="Grades changed",
             text_body="plain",
@@ -136,7 +136,7 @@ def test_send_grade_email_reports_smtp_connection_failure() -> None:
         )
 
 
-def test_send_grade_email_reports_smtp_send_failure() -> None:
+def test_send_email_reports_smtp_send_failure() -> None:
     class SendFailedSMTP(_SMTP):
         def send_message(self, message: object) -> None:
             raise smtplib.SMTPRecipientsRefused(
@@ -144,7 +144,7 @@ def test_send_grade_email_reports_smtp_send_failure() -> None:
             )
 
     with pytest.raises(NotifyError, match="SMTP send failed"):
-        send_grade_email(
+        send_email(
             _config(),
             subject="Grades changed",
             text_body="plain",
@@ -153,15 +153,85 @@ def test_send_grade_email_reports_smtp_send_failure() -> None:
         )
 
 
-def test_send_grade_email_reports_socket_failure() -> None:
+def test_send_email_reports_socket_failure() -> None:
     def fail_connect(host: str, port: int, timeout: float) -> object:
         raise socket.gaierror("name lookup failed")
 
     with pytest.raises(NotifyError, match="SMTP connection failed"):
-        send_grade_email(
+        send_email(
             _config(),
             subject="Grades changed",
             text_body="plain",
             html_body="<p>html</p>",
             smtp_factory=fail_connect,
         )
+
+
+def test_send_email_with_attachment() -> None:
+    _SMTP.instances.clear()
+
+    send_email(
+        _config(),
+        subject="With attachment",
+        text_body="plain",
+        html_body="<p>html</p>",
+        attachments=[("exam.ics", b"BEGIN:VCALENDAR", "text/calendar")],
+        smtp_factory=_SMTP,
+    )
+
+    smtp = _SMTP.instances[0]
+    assert len(smtp.messages) == 1
+    message = smtp.messages[0]
+    assert "With attachment" in message["Subject"]
+    assert message.is_multipart()
+    for part in message.walk():
+        if part.get_filename() == "exam.ics":
+            assert part.get_content_type() == "text/calendar"
+            assert part.get_payload(decode=True) == b"BEGIN:VCALENDAR"
+            break
+    else:
+        pytest.fail("attachment not found in message")
+
+
+def test_send_email_with_multiple_attachments() -> None:
+    _SMTP.instances.clear()
+
+    send_email(
+        _config(),
+        subject="Multiple attachments",
+        text_body="plain",
+        html_body="<p>html</p>",
+        attachments=[
+            ("exam.ics", b"BEGIN:VCALENDAR", "text/calendar"),
+            ("notes.txt", b"hello", "text/plain"),
+        ],
+        smtp_factory=_SMTP,
+    )
+
+    smtp = _SMTP.instances[0]
+    message = smtp.messages[0]
+    filenames = []
+    for part in message.walk():
+        fn = part.get_filename()
+        if fn:
+            filenames.append(fn)
+    assert "exam.ics" in filenames
+    assert "notes.txt" in filenames
+
+
+def test_send_email_attachments_ignored_when_none() -> None:
+    _SMTP.instances.clear()
+
+    send_email(
+        _config(),
+        subject="No attachments",
+        text_body="plain",
+        html_body="<p>html</p>",
+        attachments=None,
+        smtp_factory=_SMTP,
+    )
+
+    smtp = _SMTP.instances[0]
+    message = smtp.messages[0]
+    for part in message.walk():
+        assert part.get_filename() is None

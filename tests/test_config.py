@@ -17,6 +17,7 @@ def _query_args(**overrides: object) -> Namespace:
         "no_interactive": True,
         "save_json": False,
         "save_report": False,
+        "save_ics": False,
         "output_dir": None,
     }
     values.update(overrides)
@@ -61,7 +62,12 @@ def test_load_app_config_cli_overrides_file_values(tmp_path) -> None:
         {
             "cumt": {"username": "student", "password": "secret"},
             "query": {"year": "2024", "semester": "12"},
-            "output": {"save_json": False, "save_report": False, "output_dir": ""},
+            "output": {
+                "save_json": False,
+                "save_report": False,
+                "save_ics": False,
+                "output_dir": "",
+            },
         },
     )
 
@@ -72,6 +78,7 @@ def test_load_app_config_cli_overrides_file_values(tmp_path) -> None:
             semester="3",
             save_json=True,
             save_report=True,
+            save_ics=True,
             output_dir="reports",
         )
     )
@@ -80,6 +87,7 @@ def test_load_app_config_cli_overrides_file_values(tmp_path) -> None:
     assert config.query.semester == "3"
     assert config.output.save_json is True
     assert config.output.save_report is True
+    assert config.output.save_ics is True
     assert config.output.output_dir == "reports"
 
 
@@ -138,9 +146,7 @@ def test_load_app_config_interactively_creates_missing_config(
     monkeypatch.setattr("sys.stdin.isatty", lambda: True)
     monkeypatch.setattr("builtins.input", lambda prompt: next(answers))
 
-    config = load_app_config(
-        _query_args(config=str(config_path), no_interactive=False)
-    )
+    config = load_app_config(_query_args(config=str(config_path), no_interactive=False))
 
     written = json.loads(config_path.read_text(encoding="utf-8"))
     assert config.cumt.username == "student"
@@ -169,9 +175,7 @@ def test_load_app_config_interactively_completes_missing_fields(
     monkeypatch.setattr("sys.stdin.isatty", lambda: True)
     monkeypatch.setattr("builtins.input", lambda prompt: next(answers))
 
-    config = load_app_config(
-        _query_args(config=str(config_path), no_interactive=False)
-    )
+    config = load_app_config(_query_args(config=str(config_path), no_interactive=False))
 
     written = json.loads(config_path.read_text(encoding="utf-8"))
     assert config.cumt.password == "secret"
@@ -192,9 +196,7 @@ def test_load_app_config_interactive_skips_env_backed_fields(
     monkeypatch.setenv("CUMT_JWXT_USERNAME", "env-user")
     monkeypatch.setenv("CUMT_JWXT_PASSWORD", "env-password")
 
-    config = load_app_config(
-        _query_args(config=str(config_path), no_interactive=False)
-    )
+    config = load_app_config(_query_args(config=str(config_path), no_interactive=False))
 
     written = json.loads(config_path.read_text(encoding="utf-8"))
     assert config.cumt.username == "env-user"
