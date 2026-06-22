@@ -337,6 +337,7 @@ def test_exams_query_parses_key_arguments() -> None:
             "--no-interactive",
             "--save-json",
             "--save-report",
+            "--save-ics",
             "--output-dir",
             "./out",
             "--verbose",
@@ -351,6 +352,7 @@ def test_exams_query_parses_key_arguments() -> None:
     assert args.no_interactive is True
     assert args.save_json is True
     assert args.save_report is True
+    assert args.save_ics is True
     assert args.output_dir == "./out"
     assert args.verbose is True
 

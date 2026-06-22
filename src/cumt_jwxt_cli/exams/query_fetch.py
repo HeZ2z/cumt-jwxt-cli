@@ -37,6 +37,10 @@ def query_exam_list(config: AppConfig, client: object) -> list[ExamInfo]:
         # JWXT returns HTTP 901 when the login session has expired.
         if status_code == 901:
             raise QueryError("JWXT exam list request failed with HTTP 901.")
+        if status_code in {301, 302, 303, 307, 308}:
+            raise QueryError(
+                f"JWXT exam list request was redirected with HTTP {status_code}."
+            )
         if "text/html" in content_type:
             raise QueryError("JWXT exam list response looks like an HTML login page.")
         return parse_exam_list(response.json())
@@ -52,6 +56,7 @@ def is_exam_session_query_failure(exc: QueryError) -> bool:
     message = str(exc).lower()
     session_markers = (
         "http 901",
+        "redirected with http 30",
         "html login page",
     )
     return any(marker in message for marker in session_markers)

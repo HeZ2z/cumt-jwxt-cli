@@ -8,6 +8,7 @@ from dataclasses import dataclass
 from datetime import datetime
 
 from cumt_jwxt_cli.errors import StateError
+from cumt_jwxt_cli.exams.ics import build_ics_content, build_ics_filename
 from cumt_jwxt_cli.exams.query_state import now_iso
 from cumt_jwxt_cli.exams.report import (
     build_exam_text_summary,
@@ -21,13 +22,15 @@ from cumt_jwxt_cli.models import (
     ExamQueryResult,
     ExamSnapshotEntry,
 )
-from cumt_jwxt_cli.notify.email import send_grade_email
+from cumt_jwxt_cli.notify.email import send_email
+from cumt_jwxt_cli.output_naming import short_year_semester
 
 
 @dataclass(frozen=True)
 class PublicationArtifacts:
     text_summary: str
     html_report: str
+    ics_content: str
 
 
 def build_publication_artifacts(
@@ -51,6 +54,11 @@ def build_publication_artifacts(
             semester=config.query.semester,
             queried_at=queried_at,
         ),
+        ics_content=build_ics_content(
+            exams=result.exams,
+            year=config.query.year,
+            semester=config.query.semester,
+        ),
     )
 
 
@@ -61,14 +69,21 @@ def maybe_notify(
     *,
     force_email: bool,
     now_factory: Callable[[], datetime] | None = None,
-    send_email: Callable[..., None] = send_grade_email,
+    send_email_fn: Callable[..., None] = send_email,
 ) -> str | None:
     should_notify = bool(result.changes) or force_email
     if not config.notify.enabled or not should_notify:
         return None
 
     notified_at = now_iso(now_factory)
-    send_email(
+    attachments: list[tuple[str, bytes, str]] = [
+        (
+            build_ics_filename(config.query.year, config.query.semester),
+            artifacts.ics_content.encode("utf-8"),
+            "text/calendar",
+        ),
+    ]
+    send_email_fn(
         config.notify,
         subject=(
             f"CUMT 考试报告 "
@@ -76,6 +91,7 @@ def maybe_notify(
         ),
         text_body=artifacts.text_summary,
         html_body=artifacts.html_report,
+        attachments=attachments,
     )
     return notified_at
 
@@ -85,15 +101,21 @@ def save_optional_outputs(
     result: ExamQueryResult,
     artifacts: PublicationArtifacts,
 ) -> None:
-    if not config.output.save_json and not config.output.save_report:
+    if (
+        not config.output.save_json
+        and not config.output.save_report
+        and not config.output.save_ics
+    ):
         return
 
     try:
         output_dir = config.output.resolve_dir(config.config_path)
         output_dir.mkdir(parents=True, exist_ok=True)
 
+        suffix = short_year_semester(config.query.year, config.query.semester)
+
         if config.output.save_json:
-            (output_dir / "exams.json").write_text(
+            (output_dir / f"exams_{suffix}.json").write_text(
                 json.dumps(
                     build_exams_json_payload(result, artifacts.text_summary),
                     ensure_ascii=False,
@@ -103,8 +125,16 @@ def save_optional_outputs(
                 encoding="utf-8",
             )
         if config.output.save_report:
-            (output_dir / "exam_report.html").write_text(
+            (output_dir / f"exam_report_{suffix}.html").write_text(
                 artifacts.html_report,
+                encoding="utf-8",
+            )
+        if config.output.save_ics:
+            (
+                output_dir
+                / build_ics_filename(config.query.year, config.query.semester)
+            ).write_text(
+                artifacts.ics_content,
                 encoding="utf-8",
             )
     except OSError as exc:

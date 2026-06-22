@@ -141,6 +141,11 @@ def build_parser() -> argparse.ArgumentParser:
         help="Save an HTML report to the configured output directory.",
     )
     exams_query_parser.add_argument(
+        "--save-ics",
+        action="store_true",
+        help="Save an ICS calendar file to the configured output directory.",
+    )
+    exams_query_parser.add_argument(
         "--output-dir",
         help="Directory for optional JSON or report output.",
     )

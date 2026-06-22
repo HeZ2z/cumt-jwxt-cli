@@ -27,7 +27,7 @@ from cumt_jwxt_cli.grades.query_state import (
     state_with_session,
 )
 from cumt_jwxt_cli.models import AppConfig, GradeQueryResult, RuntimeState
-from cumt_jwxt_cli.notify.email import send_grade_email
+from cumt_jwxt_cli.notify.email import send_email
 from cumt_jwxt_cli.state import load_runtime_state, save_runtime_state
 
 
@@ -44,7 +44,7 @@ def run_grade_query(
     session_updated_at: str | None = None,
     force_email: bool,
     now_factory: Callable[[], datetime] | None = None,
-    send_email: Callable[..., None] = send_grade_email,
+    send_email_fn: Callable[..., None] = send_email,
 ) -> GradeQueryResult:
     """Run the minimal grade-list query workflow and persist safe state."""
 
@@ -79,7 +79,7 @@ def run_grade_query(
         artifacts,
         force_email=force_email,
         now_factory=now_factory,
-        send_email=send_email,
+        send_email_fn=send_email_fn,
     )
 
     state_to_save = result.state

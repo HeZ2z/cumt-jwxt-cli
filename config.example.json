@@ -41,6 +41,7 @@
   "output": {
     "save_json": false,
     "save_report": false,
+    "save_ics": false,
     "output_dir": ""
   }
 }

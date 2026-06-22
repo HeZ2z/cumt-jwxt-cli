@@ -59,7 +59,9 @@ def _config() -> AppConfig:
         ),
         notify=NotifyConfig(False, "", 465, "", "", "", ()),
         logging=LoggingConfig(14),
-        output=OutputConfig(False, False, ""),
+        output=OutputConfig(
+            save_json=False, save_report=False, save_ics=False, output_dir=""
+        ),
     )
 
 
@@ -102,7 +104,7 @@ def test_login_rejects_failed_status() -> None:
         def post(self, path: str, *, data: dict[str, str]) -> _Response:
             return _Response(text="验证码错误")
 
-    with pytest.raises(AuthError, match="JWXT login failed"):
+    with pytest.raises(AuthError, match="after multiple attempts"):
         login(_config(), FailedClient(), recognize_captcha=lambda image, config: "1234")
 
 
@@ -117,3 +119,28 @@ def test_login_accepts_redirect_after_successful_post() -> None:
         RedirectClient(),
         recognize_captcha=lambda image, config: "1234",
     )
+
+
+def test_login_retries_on_failed_captcha_then_succeeds() -> None:
+    class RetryThenSucceedClient(_Client):
+        def __init__(self) -> None:
+            super().__init__()
+            self.post_count = 0
+
+        def post(self, path: str, *, data: dict[str, str]) -> _Response:
+            self.posts.append((path, data))
+            self.post_count += 1
+            if self.post_count == 1:
+                return _Response(text="验证码错误")
+            return _Response(status_code=302)
+
+    client = RetryThenSucceedClient()
+
+    login(
+        _config(),
+        client,
+        recognize_captcha=lambda image, config: "1234",
+    )
+
+    assert len(client.posts) == 2
+    assert client.clear_cookie_calls == 2

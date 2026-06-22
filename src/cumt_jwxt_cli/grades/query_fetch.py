@@ -42,6 +42,10 @@ def query_grade_list(config: AppConfig, client: object) -> list[CourseGrade]:
         status_code = getattr(response, "status_code", None)
         if status_code == 901:
             raise QueryError("JWXT grade list request failed with HTTP 901.")
+        if status_code in {301, 302, 303, 307, 308}:
+            raise QueryError(
+                f"JWXT grade list request was redirected with HTTP {status_code}."
+            )
         if "text/html" in content_type:
             raise QueryError("JWXT grade list response looks like an HTML login page.")
         return parse_grade_list(response.json())
@@ -135,6 +139,7 @@ def is_session_query_failure(exc: QueryError) -> bool:
     message = str(exc).lower()
     session_markers = (
         "http 901",
+        "redirected with http 30",
         "html login page",
     )
     return any(marker in message for marker in session_markers)

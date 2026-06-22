@@ -61,7 +61,9 @@ def _app_config(config_path: Path) -> AppConfig:
             recipients=(),
         ),
         logging=LoggingConfig(retention_days=14),
-        output=OutputConfig(save_json=False, save_report=False, output_dir=""),
+        output=OutputConfig(
+            save_json=False, save_report=False, save_ics=False, output_dir=""
+        ),
     )
 
 

@@ -119,7 +119,9 @@ def _app_config(
             recipients=("user@example.test",) if notify_enabled else (),
         ),
         logging=LoggingConfig(retention_days=14),
-        output=OutputConfig(save_json=False, save_report=False, output_dir=""),
+        output=OutputConfig(
+            save_json=False, save_report=False, save_ics=False, output_dir=""
+        ),
     )
 
 
@@ -416,6 +418,7 @@ def test_run_grade_query_saves_json_with_stable_schema_in_explicit_output_dir(
         output=OutputConfig(
             save_json=True,
             save_report=False,
+            save_ics=False,
             output_dir=str(output_dir),
         ),
     )
@@ -454,7 +457,7 @@ def test_run_grade_query_saves_json_with_stable_schema_in_explicit_output_dir(
         ),
     )
 
-    payload = json.loads((output_dir / "grades.json").read_text(encoding="utf-8"))
+    payload = json.loads((output_dir / "grades_24sp.json").read_text(encoding="utf-8"))
 
     assert set(payload) == {"grades", "changes", "details", "summary"}
     assert set(payload["grades"][0]) == {
@@ -505,6 +508,7 @@ def test_run_grade_query_uses_explicit_output_dir_for_json_output(
         output=OutputConfig(
             save_json=True,
             save_report=False,
+            save_ics=False,
             output_dir=str(output_dir),
         ),
     )
@@ -520,8 +524,8 @@ def test_run_grade_query_uses_explicit_output_dir_for_json_output(
         ),
     )
 
-    assert (output_dir / "grades.json").exists()
-    assert not (tmp_path / "output" / "grades.json").exists()
+    assert (output_dir / "grades_24sp.json").exists()
+    assert not (tmp_path / "output" / "grades_24sp.json").exists()
 
 
 def test_run_grade_query_fetches_details_for_changed_courses(tmp_path) -> None:
@@ -617,7 +621,9 @@ def test_run_grade_query_fetches_details_for_saved_report_without_changes(
         captcha=config.captcha,
         notify=config.notify,
         logging=config.logging,
-        output=OutputConfig(save_json=False, save_report=True, output_dir=""),
+        output=OutputConfig(
+            save_json=False, save_report=True, save_ics=False, output_dir=""
+        ),
     )
     client = _QueryClient(
         {
@@ -653,7 +659,7 @@ def test_run_grade_query_fetches_details_for_saved_report_without_changes(
     ]
     assert len(detail_posts) == 1
     assert result.details[0].course_code == "A001"
-    assert "成绩构成" in (tmp_path / "output" / "grade_report.html").read_text(
+    assert "成绩构成" in (tmp_path / "output" / "grade_report_24sp.html").read_text(
         encoding="utf-8"
     )
 
@@ -794,7 +800,7 @@ def test_run_grade_query_uses_readable_term_label_in_email_subject(tmp_path) -> 
         now_factory=lambda: __import__("datetime").datetime.fromisoformat(
             "2026-05-07T12:00:00+08:00"
         ),
-        send_email=collect_email,
+        send_email_fn=collect_email,
     )
 
     assert sent_subjects == ["CUMT 成绩报告 2025-2026学年 第一学期"]
@@ -897,7 +903,7 @@ def test_run_grade_query_does_not_update_state_when_notify_fails(tmp_path) -> No
             now_factory=lambda: __import__("datetime").datetime.fromisoformat(
                 "2026-05-07T12:00:00+08:00"
             ),
-            send_email=fail_email,
+            send_email_fn=fail_email,
         )
 
     assert not (tmp_path / "state.json").exists()
@@ -907,6 +913,11 @@ def test_is_session_query_failure_matches_known_session_markers() -> None:
     assert is_session_query_failure(
         __import__("cumt_jwxt_cli.errors").errors.QueryError(
             "JWXT grade list request failed with HTTP 901."
+        )
+    )
+    assert is_session_query_failure(
+        __import__("cumt_jwxt_cli.errors").errors.QueryError(
+            "JWXT grade list request was redirected with HTTP 302."
         )
     )
     assert is_session_query_failure(

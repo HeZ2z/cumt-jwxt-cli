@@ -57,6 +57,14 @@ def test_query_exam_list_raises_on_901() -> None:
         query_exam_list(_config(), client)
 
 
+def test_query_exam_list_raises_on_redirect_response() -> None:
+    response = _FakeResponse(status_code=302)
+    client = SimpleNamespace(post=lambda *args, **kwargs: response)
+
+    with pytest.raises(QueryError, match="redirected with HTTP 302"):
+        query_exam_list(_config(), client)
+
+
 def test_query_exam_list_raises_on_html_response() -> None:
     response = _FakeResponse(status_code=200, content_type="text/html")
     client = SimpleNamespace(post=lambda *args, **kwargs: response)
@@ -91,6 +99,7 @@ def test_query_exam_list_raises_on_invalid_response_object() -> None:
     ("message", "expected"),
     [
         ("request failed with HTTP 901", True),
+        ("request was redirected with HTTP 302", True),
         ("looks like an HTML login page", True),
         ("response is not valid JSON", False),
         ("invalid response object", False),

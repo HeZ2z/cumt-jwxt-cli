@@ -32,6 +32,7 @@ cumt-jwxt exams query
 - 解析成绩列表、检测新增/更新/删除，并生成文本摘要。
 - 按需查询成绩详情，生成 HTML 邮件或本地报告。
 - 查询考试安排并生成文本摘要。
+- 可选保存成绩/考试 JSON、HTML 报告，以及考试 ICS 日历文件。
 - 在检测到成绩变化或显式强制时发送 SMTP 邮件。
 
 ## 安装
@@ -120,6 +121,18 @@ uv run cumt-jwxt exams query --config ./config.local.json --no-interactive
 ```
 
 敏感字段可以通过环境变量提供，完整配置说明见 wiki。
+
+## 输出文件命名
+
+启用可选输出后，产物文件名会带学年学期后缀，便于多学期并存：
+
+- 成绩 JSON：`grades_<yy><sp|fa>.json`
+- 成绩 HTML：`grade_report_<yy><sp|fa>.html`
+- 考试 JSON：`exams_<yy><sp|fa>.json`
+- 考试 HTML：`exam_report_<yy><sp|fa>.html`
+- 考试 ICS：`exam_schedule_<yy><sp|fa>.ics`
+
+其中 `sp` 表示春季学期，`fa` 表示秋季学期。例如 `grades_26sp.json`、`exam_schedule_25fa.ics`。
 
 ## 文档
 

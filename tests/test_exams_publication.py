@@ -41,6 +41,7 @@ def _app_config(
     notify_enabled: bool = False,
     year: str = "2025",
     semester: str = "3",
+    save_ics: bool = False,
 ) -> AppConfig:
     return AppConfig(
         config_path=config_path,
@@ -67,7 +68,12 @@ def _app_config(
             recipients=("user@example.test",) if notify_enabled else (),
         ),
         logging=LoggingConfig(retention_days=14),
-        output=OutputConfig(save_json=False, save_report=False, output_dir=""),
+        output=OutputConfig(
+            save_json=False,
+            save_report=False,
+            save_ics=save_ics,
+            output_dir="",
+        ),
     )
 
 
@@ -114,10 +120,10 @@ def _result(
 
 
 class TestBuildPublicationArtifacts:
-    def test_builds_text_and_html(self) -> None:
+    def test_builds_text_html_and_ics(self) -> None:
         config = _app_config(Path("/tmp/test/config.local.json"))
         result = _result(
-            exams=(_exam("A001", "高等数学"),),
+            exams=(_exam("A001", "高等数学", exam_time="2026-06-01(08:00-10:00)"),),
         )
         artifacts = build_publication_artifacts(
             config, result, queried_at="2026-06-01T12:00:00"
@@ -125,6 +131,8 @@ class TestBuildPublicationArtifacts:
 
         assert "CUMT exams" in artifacts.text_summary
         assert "CUMT 考试报告" in artifacts.html_report
+        assert "BEGIN:VCALENDAR" in artifacts.ics_content
+        assert "END:VCALENDAR" in artifacts.ics_content
 
 
 class TestMaybeNotify:
@@ -143,9 +151,11 @@ class TestMaybeNotify:
         notified_at = maybe_notify(
             config,
             result,
-            PublicationArtifacts(text_summary="text", html_report="html"),
+            PublicationArtifacts(
+                text_summary="text", html_report="html", ics_content="ics"
+            ),
             force_email=False,
-            send_email=fake_send,
+            send_email_fn=fake_send,
         )
 
         assert notified_at is None
@@ -162,9 +172,11 @@ class TestMaybeNotify:
         notified_at = maybe_notify(
             config,
             result,
-            PublicationArtifacts(text_summary="text", html_report="html"),
+            PublicationArtifacts(
+                text_summary="text", html_report="html", ics_content="ics"
+            ),
             force_email=False,
-            send_email=fake_send,
+            send_email_fn=fake_send,
         )
 
         assert notified_at is None
@@ -184,9 +196,11 @@ class TestMaybeNotify:
         notified_at = maybe_notify(
             config,
             result,
-            PublicationArtifacts(text_summary="text", html_report="html"),
+            PublicationArtifacts(
+                text_summary="text", html_report="html", ics_content="ics"
+            ),
             force_email=False,
-            send_email=fake_send,
+            send_email_fn=fake_send,
         )
 
         assert notified_at is not None
@@ -204,13 +218,49 @@ class TestMaybeNotify:
         notified_at = maybe_notify(
             config,
             result,
-            PublicationArtifacts(text_summary="text", html_report="html"),
+            PublicationArtifacts(
+                text_summary="text", html_report="html", ics_content="ics"
+            ),
             force_email=True,
-            send_email=fake_send,
+            send_email_fn=fake_send,
         )
 
         assert notified_at is not None
         assert sent == 1
+
+    def test_sends_ics_attachment(self) -> None:
+        config = _app_config(
+            Path("/tmp/test/config.local.json"),
+            notify_enabled=True,
+        )
+        result = _result(
+            changes=(
+                ExamChange(change_type="added", before=None, after=_entry("A", "X")),
+            ),
+        )
+        captured_attachments: list[tuple[str, bytes, str]] = []
+
+        def capturing_send(
+            *args: object,
+            attachments: list[tuple[str, bytes, str]] | None = None,
+            **kwargs: object,
+        ) -> None:
+            if attachments:
+                captured_attachments.extend(attachments)
+
+        maybe_notify(
+            config,
+            result,
+            PublicationArtifacts(
+                text_summary="text", html_report="html", ics_content="BEGIN:VCALENDAR"
+            ),
+            force_email=False,
+            send_email_fn=capturing_send,
+        )
+
+        assert captured_attachments == [
+            ("exam_schedule_25fa.ics", b"BEGIN:VCALENDAR", "text/calendar")
+        ]
 
     def test_raises_when_send_fails(self) -> None:
         config = _app_config(Path("/tmp/test/config.local.json"), notify_enabled=True)
@@ -227,9 +277,11 @@ class TestMaybeNotify:
             maybe_notify(
                 config,
                 result,
-                PublicationArtifacts(text_summary="text", html_report="html"),
+                PublicationArtifacts(
+                    text_summary="text", html_report="html", ics_content="ics"
+                ),
                 force_email=False,
-                send_email=failing_send,
+                send_email_fn=failing_send,
             )
 
 
@@ -244,7 +296,7 @@ class TestSaveOptionalOutputs:
         save_optional_outputs(config, result, artifacts)
         assert not list(tmp_path.iterdir())
 
-    def test_saves_json(self, tmp_path: Path) -> None:
+    def test_saves_json_with_suffix(self, tmp_path: Path) -> None:
         config = _app_config(tmp_path / "config.local.json")
         config = AppConfig(
             config_path=config.config_path,
@@ -255,7 +307,9 @@ class TestSaveOptionalOutputs:
             captcha=config.captcha,
             notify=config.notify,
             logging=config.logging,
-            output=OutputConfig(save_json=True, save_report=False, output_dir=""),
+            output=OutputConfig(
+                save_json=True, save_report=False, save_ics=False, output_dir=""
+            ),
         )
         result = _result(exams=(_exam("A001", "高数"),))
         artifacts = build_publication_artifacts(
@@ -265,13 +319,13 @@ class TestSaveOptionalOutputs:
         save_optional_outputs(config, result, artifacts)
 
         payload = json.loads(
-            (tmp_path / "output" / "exams.json").read_text(encoding="utf-8")
+            (tmp_path / "output" / "exams_25fa.json").read_text(encoding="utf-8")
         )
         assert set(payload) == {"exams", "changes", "summary"}
         assert "session_cookies" not in payload
         assert "username" not in json.dumps(payload)
 
-    def test_saves_report(self, tmp_path: Path) -> None:
+    def test_saves_report_with_suffix(self, tmp_path: Path) -> None:
         config = _app_config(tmp_path / "config.local.json")
         config = AppConfig(
             config_path=config.config_path,
@@ -282,7 +336,9 @@ class TestSaveOptionalOutputs:
             captcha=config.captcha,
             notify=config.notify,
             logging=config.logging,
-            output=OutputConfig(save_json=False, save_report=True, output_dir=""),
+            output=OutputConfig(
+                save_json=False, save_report=True, save_ics=False, output_dir=""
+            ),
         )
         result = _result(exams=(_exam("A001", "高数"),))
         artifacts = build_publication_artifacts(
@@ -291,8 +347,27 @@ class TestSaveOptionalOutputs:
 
         save_optional_outputs(config, result, artifacts)
 
-        report = (tmp_path / "output" / "exam_report.html").read_text(encoding="utf-8")
+        report = (tmp_path / "output" / "exam_report_25fa.html").read_text(
+            encoding="utf-8"
+        )
         assert "CUMT 考试报告" in report
+
+    def test_saves_ics(self, tmp_path: Path) -> None:
+        config = _app_config(tmp_path / "config.local.json", save_ics=True)
+        result = _result(
+            exams=(_exam("A001", "高数", exam_time="2026-06-01(08:00-10:00)"),),
+        )
+        artifacts = build_publication_artifacts(
+            config, result, queried_at="2026-06-01T12:00:00"
+        )
+
+        save_optional_outputs(config, result, artifacts)
+
+        ics = (tmp_path / "output" / "exam_schedule_25fa.ics").read_text(
+            encoding="utf-8"
+        )
+        assert "BEGIN:VCALENDAR" in ics
+        assert "END:VCALENDAR" in ics
 
 
 class TestSerializers:

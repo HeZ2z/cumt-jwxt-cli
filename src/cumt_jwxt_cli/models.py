@@ -83,6 +83,7 @@ class OutputConfig:
 
     save_json: bool
     save_report: bool
+    save_ics: bool
     output_dir: str
 
     def resolve_dir(self, config_path: Path) -> Path:

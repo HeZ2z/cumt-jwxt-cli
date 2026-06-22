@@ -45,6 +45,7 @@ _PATH_NOTIFY_RECIPIENTS = ("notify", "recipients")
 _PATH_LOGGING_RETENTION_DAYS = ("logging", "retention_days")
 _PATH_OUTPUT_SAVE_JSON = ("output", "save_json")
 _PATH_OUTPUT_SAVE_REPORT = ("output", "save_report")
+_PATH_OUTPUT_SAVE_ICS = ("output", "save_ics")
 _PATH_OUTPUT_DIR = ("output", "output_dir")
 _PATH_HTTP_TIMEOUT_SECONDS = ("http", "timeout_seconds")
 _PATH_HTTP_RETRY_ATTEMPTS = ("http", "retry_attempts")
@@ -354,6 +355,8 @@ def _build_output_config(raw_config: dict[str, Any], args: Namespace) -> OutputC
         or _get_bool(raw_config, _PATH_OUTPUT_SAVE_JSON, default=False),
         save_report=bool(getattr(args, "save_report", False))
         or _get_bool(raw_config, _PATH_OUTPUT_SAVE_REPORT, default=False),
+        save_ics=bool(getattr(args, "save_ics", False))
+        or _get_bool(raw_config, _PATH_OUTPUT_SAVE_ICS, default=False),
         output_dir=(
             getattr(args, "output_dir", None)
             if getattr(args, "output_dir", None) is not None

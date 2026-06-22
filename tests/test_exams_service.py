@@ -114,7 +114,9 @@ def _app_config(
             recipients=("user@example.test",) if notify_enabled else (),
         ),
         logging=LoggingConfig(retention_days=14),
-        output=OutputConfig(save_json=False, save_report=False, output_dir=""),
+        output=OutputConfig(
+            save_json=False, save_report=False, save_ics=False, output_dir=""
+        ),
     )
 
 
@@ -209,7 +211,9 @@ def test_run_exam_query_saves_json_with_stable_schema(tmp_path: Path) -> None:
         captcha=config.captcha,
         notify=config.notify,
         logging=config.logging,
-        output=OutputConfig(save_json=True, save_report=False, output_dir=""),
+        output=OutputConfig(
+            save_json=True, save_report=False, save_ics=False, output_dir=""
+        ),
     )
     client = _QueryClient({"items": [{"kch": "A001", "kcmc": "高等数学"}]})
 
@@ -224,7 +228,7 @@ def test_run_exam_query_saves_json_with_stable_schema(tmp_path: Path) -> None:
     )
 
     payload = json.loads(
-        (config.output.resolve_dir(config.config_path) / "exams.json").read_text(
+        (config.output.resolve_dir(config.config_path) / "exams_25fa.json").read_text(
             encoding="utf-8"
         )
     )
@@ -258,7 +262,10 @@ def test_run_exam_query_uses_explicit_output_dir(tmp_path: Path) -> None:
         notify=config.notify,
         logging=config.logging,
         output=OutputConfig(
-            save_json=True, save_report=False, output_dir=str(output_dir)
+            save_json=True,
+            save_report=False,
+            save_ics=False,
+            output_dir=str(output_dir),
         ),
     )
     client = _QueryClient({"items": [{"kch": "A001", "kcmc": "高等数学"}]})
@@ -273,8 +280,8 @@ def test_run_exam_query_uses_explicit_output_dir(tmp_path: Path) -> None:
         ),
     )
 
-    assert (output_dir / "exams.json").exists()
-    assert not (tmp_path / "output" / "exams.json").exists()
+    assert (output_dir / "exams_25fa.json").exists()
+    assert not (tmp_path / "output" / "exams_25fa.json").exists()
 
 
 def test_run_exam_query_sends_email_when_changes_detected(tmp_path: Path) -> None:
@@ -293,7 +300,7 @@ def test_run_exam_query_sends_email_when_changes_detected(tmp_path: Path) -> Non
         now_factory=lambda: __import__("datetime").datetime.fromisoformat(
             "2026-06-01T12:00:00+08:00"
         ),
-        send_email=collect_email,
+        send_email_fn=collect_email,
     )
 
     assert sent_subjects == ["CUMT 考试报告 2025-2026 第一学期"]
@@ -316,7 +323,7 @@ def test_run_exam_query_does_not_update_state_when_notify_fails(tmp_path: Path) 
             now_factory=lambda: __import__("datetime").datetime.fromisoformat(
                 "2026-06-01T12:00:00+08:00"
             ),
-            send_email=fail_email,
+            send_email_fn=fail_email,
         )
 
     assert not (tmp_path / "state.json").exists()
