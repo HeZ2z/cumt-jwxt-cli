@@ -115,15 +115,6 @@ wheels = [
 ]
 
 [[package]]
-name = "distro"
-version = "1.9.0"
-source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/fc/f8/98eea607f65de6527f8a2e8885fc8015d3e6f5775df186e443e0964a11c3/distro-1.9.0.tar.gz", hash = "sha256:2fa77c6fd8940f116ee1d6b94a2f90b13b5ea8d019b98bc8bafdcabcdd9bdbed", size = 60722, upload-time = "2023-12-24T09:54:32.31Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/12/b3/231ffd4ab1fc9d679809f356cebee130ac7daa00d6d6f3206dd4fd137e9e/distro-1.9.0-py3-none-any.whl", hash = "sha256:7bffd925d65168f85027d8da9af6bddab658135b840670a223589bc0c8ef02b2", size = 20277, upload-time = "2023-12-24T09:54:30.421Z" },
-]
-
-[[package]]
 name = "flatbuffers"
 version = "25.12.19"
 source = { registry = "https://pypi.org/simple" }
@@ -158,8 +149,8 @@ name = "httpcore2"
 version = "2.10.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "h11", marker = "python_full_version < '3.12' or sys_platform != 'emscripten'" },
-    { name = "truststore", marker = "python_full_version < '3.12' or sys_platform != 'emscripten'" },
+    { name = "h11" },
+    { name = "truststore" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/a9/83/a896fc59940fc5a6e2aff3a4be1d92fa890112936803b331cae75a993c34/httpcore2-2.10.0.tar.gz", hash = "sha256:13c0cc3d1919d4f28457f60cd2c2abe04113a8af184ccf1142811beba936f9dc", size = 67427, upload-time = "2026-08-09T09:11:32.123Z" }
 wheels = [
@@ -610,21 +601,19 @@ wheels = [
 
 [[package]]
 name = "openai"
-version = "3.1.0"
+version = "3.11.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "anyio" },
-    { name = "distro" },
     { name = "httpx2" },
     { name = "jiter" },
     { name = "pydantic" },
     { name = "sniffio" },
-    { name = "tqdm" },
     { name = "typing-extensions" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/58/9b/d45911bf9abfc5a754d800d79fe56e4dcf6e7b679d6ff4b7e9689b56bc02/openai-3.1.0.tar.gz", hash = "sha256:3ae7190da63f718727f9c525740d3f713e85553d2bf1d0cc9247346bd9063a4d", size = 1131016, upload-time = "2026-08-14T23:49:46.325Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/e5/31/cacdcba6fb96dae7df9b24573b73904464561e17a77b78c5a4e330a6da89/openai-3.11.0.tar.gz", hash = "sha256:1ee0114c218bba9ffdea1927b974b4ddeee5f173000b0930aab53efc7c349989", size = 1487330, upload-time = "2026-09-09T15:32:16.913Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/d3/45/84b9e909968c0f4c3112a828bba9aa8be6a5ee322fcb3d781145ee53d88e/openai-3.1.0-py3-none-any.whl", hash = "sha256:f06d5a5c8d06a0aead3a67d33fe5a3c3c31540a0f7a8017b02ba8cd99bc5c736", size = 1670762, upload-time = "2026-08-14T23:49:43.998Z" },
+    { url = "https://files.pythonhosted.org/packages/c1/c4/d23c3f86e280e09a001dc9ad7330e882531baca2e598e42b0d7d1eb693c4/openai-3.11.0-py3-none-any.whl", hash = "sha256:2fc169442feafd535f4959605b42d47bc922216385a6d2473b0d47956691d9fd", size = 1749391, upload-time = "2026-09-09T15:32:14.854Z" },
 ]
 
 [[package]]
@@ -633,7 +622,7 @@ version = "5.0.0.93"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "numpy", version = "2.4.6", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.12'" },
-    { name = "numpy", version = "2.5.3", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.12' and sys_platform != 'emscripten'" },
+    { name = "numpy", version = "2.5.3", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.12'" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/79/4c/a438d23e09ce2033c09f7b784ad2fbdb0adf529e434101ed28f142226f98/opencv_python-5.0.0.93.tar.gz", hash = "sha256:66aac3e5b5faa48d4025816592f3af19e4bfc2c68dec067bae2dbb4ca10aa9e2", size = 81802749, upload-time = "2026-07-02T06:59:53.815Z" }
 wheels = [
@@ -649,7 +638,7 @@ version = "5.0.0.93"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "numpy", version = "2.4.6", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.12'" },
-    { name = "numpy", version = "2.5.3", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.12' and sys_platform != 'emscripten'" },
+    { name = "numpy", version = "2.5.3", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.12'" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/1d/99/76b7c80252aa83c1af16393454aafd125a0287101afe8deb0a6821af0e30/opencv_python_headless-5.0.0.93.tar.gz", hash = "sha256:b82f9831daab90b725c7c1ee1b36cb5732c367096ac76d119e64e14eb70d5f3c", size = 81817738, upload-time = "2026-07-02T07:01:06.039Z" }
 wheels = [
@@ -990,18 +979,6 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/47/2c/0a5f6f8ee0d5589e48c7640213ed5175d52cf540a06725b628cc1a45d6ce/soupsieve-2.8.4.tar.gz", hash = "sha256:e121fd02e975c695e4e9e8774a5ee35d74714b59307868dcc5319ad2d9e3328e", size = 121110, upload-time = "2026-05-24T13:55:57.154Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/5e/f5/0c41cb68dcae6b7de4fac4188a3a9589e21fb31df21ea3a2e888db95e6c9/soupsieve-2.8.4-py3-none-any.whl", hash = "sha256:e7e6b0769c8f51ed59acab6e994b00621096cfb1c640a7509295987388fbaf65", size = 37304, upload-time = "2026-05-24T13:55:55.406Z" },
-]
-
-[[package]]
-name = "tqdm"
-version = "4.68.4"
-source = { registry = "https://pypi.org/simple" }
-dependencies = [
-    { name = "colorama", marker = "sys_platform == 'win32'" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/ae/5f/57ff8b434839e70dab45601284ea413e947a63799891b7553e5960a793a8/tqdm-4.68.4.tar.gz", hash = "sha256:19829c9673638f2a0b8617da4cdcb927e831cd88bcfcb6e78d42a4d1af131520", size = 792418, upload-time = "2026-07-07T09:58:18.369Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/22/2a/5e5e750890ada51017d18d0d4c30da696e5b5bd3180947729927628fc3cb/tqdm-4.68.4-py3-none-any.whl", hash = "sha256:5168118b2368f48c561afda8020fd79195b1bdb0bdf8086b88442c267a315dc2", size = 676612, upload-time = "2026-07-07T09:58:16.256Z" },
 ]
 
 [[package]]
