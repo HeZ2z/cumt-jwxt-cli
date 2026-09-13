@@ -7,10 +7,12 @@ from collections.abc import Callable
 
 from bs4 import BeautifulSoup
 
+from cumt_jwxt_cli.client.password_crypto import encrypt_password
 from cumt_jwxt_cli.errors import AuthError, CaptchaError
 from cumt_jwxt_cli.models import AppConfig
 
 LOGIN_PATH = "/xtgl/login_slogin.html"
+PUBLIC_KEY_PATH = "/xtgl/login_getPublicKey.html"
 
 
 def extract_csrf_token(login_html: str) -> str:
@@ -22,6 +24,39 @@ def extract_csrf_token(login_html: str) -> str:
     if not isinstance(token, str) or not token.strip():
         raise AuthError("JWXT login page did not contain a CSRF token.")
     return token.strip()
+
+
+def should_encrypt_password(login_html: str) -> bool:
+    """Return whether the login form expects an RSA-encrypted password.
+
+    The page disables encryption only when ``mmsfjm`` is explicitly ``0``. A
+    missing field is treated as encryption enabled, matching ``login.js``.
+    """
+
+    soup = BeautifulSoup(login_html, "html.parser")
+    field = soup.find("input", attrs={"name": "mmsfjm"})
+    if field is None:
+        return True
+    return str(field.get("value", "")).strip() != "0"
+
+
+def fetch_public_key(client: object) -> tuple[str, str]:
+    """Fetch the RSA public key the login form uses to encrypt the password."""
+
+    timestamp_ms = int(time.time() * 1000)
+    response = client.get(f"{PUBLIC_KEY_PATH}?time={timestamp_ms}")
+    try:
+        payload = response.json()
+    except Exception as exc:  # noqa: BLE001 - response library varies.
+        raise AuthError("JWXT public key response was not valid JSON.") from exc
+
+    modulus = payload.get("modulus") if isinstance(payload, dict) else None
+    exponent = payload.get("exponent") if isinstance(payload, dict) else None
+    if not isinstance(modulus, str) or not isinstance(exponent, str):
+        raise AuthError("JWXT public key response was incomplete.")
+    if not modulus or not exponent:
+        raise AuthError("JWXT public key response was incomplete.")
+    return modulus, exponent
 
 
 def login(
@@ -54,6 +89,11 @@ def login(
             if not captcha_code:
                 raise CaptchaError("Captcha recognition returned an empty code.")
 
+            password = config.cumt.password
+            if should_encrypt_password(login_response.text):
+                modulus, exponent = fetch_public_key(client)
+                password = encrypt_password(password, modulus, exponent)
+
             response = client.post(
                 LOGIN_PATH,
                 data={
@@ -61,7 +101,7 @@ def login(
                     "language": "zh_CN",
                     "ydType": "",
                     "yhm": config.cumt.username,
-                    "mm": config.cumt.password,
+                    "mm": password,
                     "yzm": captcha_code,
                 },
             )

@@ -1,8 +1,14 @@
 """Authentication boundary tests."""
 
+import json
+
 import pytest
 
-from cumt_jwxt_cli.client.auth import extract_csrf_token, login
+from cumt_jwxt_cli.client.auth import (
+    extract_csrf_token,
+    login,
+    should_encrypt_password,
+)
 from cumt_jwxt_cli.errors import AuthError
 from cumt_jwxt_cli.models import (
     AppConfig,
@@ -24,17 +30,25 @@ class _Response:
         self.content = content
         self.status_code = status_code
 
+    def json(self) -> object:
+        return json.loads(self.text)
+
 
 class _Client:
-    def __init__(self) -> None:
+    def __init__(self, *, login_html: str | None = None) -> None:
+        self.login_html = login_html or '<input name="csrftoken" value="TOKEN">'
         self.posts: list[tuple[str, dict[str, str]]] = []
         self.clear_cookie_calls = 0
+        self.public_key_fetches = 0
 
     def get(self, path: str) -> _Response:
         if path.startswith("/xtgl/login_slogin.html"):
-            return _Response(text='<input name="csrftoken" value="TOKEN">')
+            return _Response(text=self.login_html)
         if path.startswith("/kaptcha"):
             return _Response(content=b"captcha-bytes")
+        if path.startswith("/xtgl/login_getPublicKey.html"):
+            self.public_key_fetches += 1
+            return _Response(text='{"modulus": "AQ==", "exponent": "AQ=="}')
         raise AssertionError(path)
 
     def post(self, path: str, *, data: dict[str, str]) -> _Response:
@@ -43,6 +57,14 @@ class _Client:
 
     def clear_cookies(self) -> None:
         self.clear_cookie_calls += 1
+
+
+@pytest.fixture(autouse=True)
+def _fake_password_encryption(monkeypatch) -> None:
+    monkeypatch.setattr(
+        "cumt_jwxt_cli.client.auth.encrypt_password",
+        lambda password, modulus, exponent: "ENCRYPTED",
+    )
 
 
 def _config() -> AppConfig:
@@ -91,12 +113,35 @@ def test_login_submits_captcha_and_credentials() -> None:
                 "language": "zh_CN",
                 "ydType": "",
                 "yhm": "student",
-                "mm": "secret",
+                "mm": "ENCRYPTED",
                 "yzm": "1234",
             },
         )
     ]
     assert client.clear_cookie_calls == 1
+    assert client.public_key_fetches == 1
+
+
+def test_should_encrypt_password_defaults_to_true_without_flag() -> None:
+    assert should_encrypt_password('<input name="csrftoken" value="T">') is True
+
+
+def test_should_encrypt_password_is_false_only_for_zero() -> None:
+    assert should_encrypt_password('<input name="mmsfjm" value="0">') is False
+    assert should_encrypt_password('<input name="mmsfjm" value="1">') is True
+
+
+def test_login_skips_password_encryption_when_disabled() -> None:
+    client = _Client(
+        login_html=(
+            '<input name="csrftoken" value="TOKEN"><input name="mmsfjm" value="0">'
+        )
+    )
+
+    login(_config(), client, recognize_captcha=lambda image, config: "1234")
+
+    assert client.posts[0][1]["mm"] == "secret"
+    assert client.public_key_fetches == 0
 
 
 def test_login_rejects_failed_status() -> None:
