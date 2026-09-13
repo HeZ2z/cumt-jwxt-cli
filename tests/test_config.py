@@ -5,7 +5,11 @@ from argparse import Namespace
 
 import pytest
 
-from cumt_jwxt_cli.config import load_app_config, resolve_config_path
+from cumt_jwxt_cli.config import (
+    _read_config_template,
+    load_app_config,
+    resolve_config_path,
+)
 from cumt_jwxt_cli.errors import ConfigError
 
 
@@ -122,10 +126,14 @@ def test_load_app_config_interactively_creates_missing_config(
     monkeypatch,
 ) -> None:
     config_path = tmp_path / "config.local.json"
-    answers = iter(["student", "secret", "2026", "3"])
+    answers = iter(["student", "secret"])
 
     monkeypatch.setattr("sys.stdin.isatty", lambda: True)
     monkeypatch.setattr("builtins.input", lambda prompt: next(answers))
+    monkeypatch.setattr(
+        "cumt_jwxt_cli.config._read_config_template",
+        lambda: {"query": {"year": "2026", "semester": "3"}},
+    )
 
     config = load_app_config(_query_args(config=str(config_path), no_interactive=False))
 
@@ -135,6 +143,13 @@ def test_load_app_config_interactively_creates_missing_config(
     assert config.query.year == "2026"
     assert config.query.semester == "3"
     assert written["cumt"]["username"] == "student"
+
+
+def test_read_config_template_loads_example_config() -> None:
+    template = _read_config_template()
+
+    assert template
+    assert "query" in template
 
 
 def test_load_app_config_interactively_completes_missing_fields(

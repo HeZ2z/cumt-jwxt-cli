@@ -160,7 +160,7 @@ def _complete_interactive_config(
 
 
 def _read_config_template() -> dict[str, Any]:
-    template_path = Path(__file__).resolve().parents[3] / "config.example.json"
+    template_path = Path(__file__).resolve().parents[2] / "config.example.json"
     if not template_path.is_file():
         return {}
     try:
