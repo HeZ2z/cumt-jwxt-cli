@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from cumt_jwxt_cli.captcha.openai_compatible import recognize_captcha
+from cumt_jwxt_cli.captcha.ddddocr_ocr import recognize_captcha
 from cumt_jwxt_cli.client.auth import login
 from cumt_jwxt_cli.client.http import JWXTClient
 from cumt_jwxt_cli.errors import QueryError
@@ -73,7 +73,6 @@ def _login(config: AppConfig, client: JWXTClient) -> None:
 def _recognize_captcha_with_config(image: bytes, config: AppConfig) -> str:
     return recognize_captcha(
         image,
-        config.captcha.openai_compatible,
         manual_timeout_seconds=config.captcha.manual_timeout_seconds,
     )
 
