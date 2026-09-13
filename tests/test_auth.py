@@ -18,7 +18,6 @@ from cumt_jwxt_cli.models import (
     HTTPConfig,
     LoggingConfig,
     NotifyConfig,
-    OpenAICompatibleConfig,
     OutputConfig,
     QueryConfig,
 )
@@ -74,11 +73,7 @@ def _config() -> AppConfig:
         query=QueryConfig(year="2024", semester="12"),
         http=HTTPConfig(30, 2, 1.5),
         grades=GradesConfig(True, 3),
-        captcha=CaptchaConfig(
-            "openai_compatible",
-            60,
-            OpenAICompatibleConfig("", "", ""),
-        ),
+        captcha=CaptchaConfig(manual_timeout_seconds=60),
         notify=NotifyConfig(False, "", 465, "", "", "", ()),
         logging=LoggingConfig(14),
         output=OutputConfig(

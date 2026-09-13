@@ -28,7 +28,7 @@ cumt-jwxt exams query
 - 读取本地配置和 `CUMT_JWXT_*` 环境变量。
 - 使用受控 HTTP session 查询教务系统成绩和考试安排。
 - 复用 `state.json` 中的会话 cookie，会话失效后自动重新登录。
-- 使用 OpenAI 兼容接口识别验证码，交互式终端下可人工输入。
+- 使用本地 ddddocr 识别验证码，图片不离开本机；交互式终端下识别失败可人工输入。
 - 解析成绩列表、检测新增/更新/删除，并生成文本摘要。
 - 按需查询成绩详情，生成 HTML 邮件或本地报告。
 - 查询考试安排并生成文本摘要。
@@ -79,7 +79,7 @@ pip install -e .
 cp config.example.json config.local.json
 ```
 
-填写 `config.local.json` 中的教务系统账号、查询学期和验证码识别(若不填写验证码识别的 api 配置，也可以手动输入验证码内容)配置后运行：
+填写 `config.local.json` 中的教务系统账号和查询学期后运行（验证码默认本地识别，交互式终端下识别失败可手动输入）：
 
 ```bash
 uv run cumt-jwxt grades query
@@ -106,13 +106,7 @@ uv run cumt-jwxt exams query --config ./config.local.json --no-interactive
     "semester": "3"
   },
   "captcha": {
-    "provider": "openai_compatible",
-    "manual_timeout_seconds": 60,
-    "openai_compatible": {
-      "base_url": "https://your-openai-compatible-endpoint",
-      "api_key": "your-api-key",
-      "model": "your-model-name"
-    }
+    "manual_timeout_seconds": 60
   },
   "notify": {
     "enabled": false

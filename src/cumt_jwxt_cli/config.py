@@ -18,7 +18,6 @@ from cumt_jwxt_cli.models import (
     HTTPConfig,
     LoggingConfig,
     NotifyConfig,
-    OpenAICompatibleConfig,
     OutputConfig,
     QueryConfig,
 )
@@ -29,11 +28,7 @@ _PATH_CUMT_USERNAME = ("cumt", "username")
 _PATH_CUMT_PASSWORD = ("cumt", "password")
 _PATH_QUERY_YEAR = ("query", "year")
 _PATH_QUERY_SEMESTER = ("query", "semester")
-_PATH_CAPTCHA_PROVIDER = ("captcha", "provider")
 _PATH_CAPTCHA_MANUAL_TIMEOUT = ("captcha", "manual_timeout_seconds")
-_PATH_CAPTCHA_OPENAI_BASE_URL = ("captcha", "openai_compatible", "base_url")
-_PATH_CAPTCHA_OPENAI_API_KEY = ("captcha", "openai_compatible", "api_key")
-_PATH_CAPTCHA_OPENAI_MODEL = ("captcha", "openai_compatible", "model")
 _PATH_NOTIFY_ENABLED = ("notify", "enabled")
 _PATH_NOTIFY_SMTP_HOST = ("notify", "smtp_host")
 _PATH_NOTIFY_SMTP_PORT = ("notify", "smtp_port")
@@ -55,9 +50,6 @@ _PATH_GRADES_DETAIL_CONCURRENCY = ("grades", "detail_concurrency")
 _ENV_NAME_BY_PATH = {
     _PATH_CUMT_USERNAME: f"{_ENV_PREFIX}USERNAME",
     _PATH_CUMT_PASSWORD: f"{_ENV_PREFIX}PASSWORD",
-    _PATH_CAPTCHA_OPENAI_BASE_URL: (f"{_ENV_PREFIX}CAPTCHA_OPENAI_COMPATIBLE_BASE_URL"),
-    _PATH_CAPTCHA_OPENAI_API_KEY: f"{_ENV_PREFIX}CAPTCHA_OPENAI_COMPATIBLE_API_KEY",
-    _PATH_CAPTCHA_OPENAI_MODEL: f"{_ENV_PREFIX}CAPTCHA_OPENAI_COMPATIBLE_MODEL",
     _PATH_NOTIFY_SMTP_HOST: f"{_ENV_PREFIX}SMTP_HOST",
     _PATH_NOTIFY_USERNAME: f"{_ENV_PREFIX}SMTP_USERNAME",
     _PATH_NOTIFY_PASSWORD: f"{_ENV_PREFIX}SMTP_PASSWORD",
@@ -68,9 +60,6 @@ _PROMPT_FIELDS = (
     _PATH_CUMT_PASSWORD,
     _PATH_QUERY_YEAR,
     _PATH_QUERY_SEMESTER,
-    _PATH_CAPTCHA_OPENAI_BASE_URL,
-    _PATH_CAPTCHA_OPENAI_API_KEY,
-    _PATH_CAPTCHA_OPENAI_MODEL,
 )
 
 
@@ -273,35 +262,10 @@ def _build_grades_config(raw_config: dict[str, Any]) -> GradesConfig:
 
 def _build_captcha_config(raw_config: dict[str, Any]) -> CaptchaConfig:
     return CaptchaConfig(
-        provider=_get_string(
-            raw_config,
-            _PATH_CAPTCHA_PROVIDER,
-            default="openai_compatible",
-        ),
         manual_timeout_seconds=_get_int(
             raw_config,
             _PATH_CAPTCHA_MANUAL_TIMEOUT,
             default=60,
-        ),
-        openai_compatible=OpenAICompatibleConfig(
-            base_url=_get_string(
-                raw_config,
-                _PATH_CAPTCHA_OPENAI_BASE_URL,
-                env_name=_env_name_for_path(_PATH_CAPTCHA_OPENAI_BASE_URL),
-                default="",
-            ),
-            api_key=_get_string(
-                raw_config,
-                _PATH_CAPTCHA_OPENAI_API_KEY,
-                env_name=_env_name_for_path(_PATH_CAPTCHA_OPENAI_API_KEY),
-                default="",
-            ),
-            model=_get_string(
-                raw_config,
-                _PATH_CAPTCHA_OPENAI_MODEL,
-                env_name=_env_name_for_path(_PATH_CAPTCHA_OPENAI_MODEL),
-                default="",
-            ),
         ),
     )
 

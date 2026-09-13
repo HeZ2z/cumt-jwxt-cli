@@ -16,7 +16,6 @@ def _config() -> SimpleNamespace:
             retry_backoff_seconds=1.5,
         ),
         captcha=SimpleNamespace(
-            openai_compatible=SimpleNamespace(),
             manual_timeout_seconds=60,
         ),
     )

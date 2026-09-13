@@ -9,7 +9,7 @@ from __future__ import annotations
 import sys
 from typing import Any
 
-from cumt_jwxt_cli.captcha.openai_compatible import _manual_captcha_input
+from cumt_jwxt_cli.captcha.manual import manual_captcha_input
 from cumt_jwxt_cli.errors import CaptchaError
 
 _ocr_engine: Any | None = None
@@ -44,7 +44,7 @@ def recognize_captcha(
         answer = _get_ocr_engine().classification(image_bytes)
     except Exception as exc:  # noqa: BLE001 - ddddocr raises varied exceptions.
         if manual_timeout_seconds is not None and sys.stdin.isatty():
-            return _manual_captcha_input(image_bytes, manual_timeout_seconds)
+            return manual_captcha_input(image_bytes, manual_timeout_seconds)
         raise CaptchaError("Captcha recognition failed.") from exc
 
     if not isinstance(answer, str) or not answer.strip():

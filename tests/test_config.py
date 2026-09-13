@@ -98,24 +98,15 @@ def test_load_app_config_env_overrides_sensitive_fields(tmp_path, monkeypatch) -
         {
             "cumt": {"username": "file-user", "password": "file-password"},
             "query": {"year": "2024", "semester": "12"},
-            "captcha": {
-                "openai_compatible": {
-                    "api_key": "file-key",
-                    "base_url": "https://example.test/v1",
-                    "model": "file-model",
-                }
-            },
         },
     )
     monkeypatch.setenv("CUMT_JWXT_USERNAME", "env-user")
     monkeypatch.setenv("CUMT_JWXT_PASSWORD", "env-password")
-    monkeypatch.setenv("CUMT_JWXT_CAPTCHA_OPENAI_COMPATIBLE_API_KEY", "env-key")
 
     config = load_app_config(_query_args(config=str(config_path)))
 
     assert config.cumt.username == "env-user"
     assert config.cumt.password == "env-password"
-    assert config.captcha.openai_compatible.api_key == "env-key"
 
 
 def test_load_app_config_missing_required_field_fails(tmp_path) -> None:
@@ -131,17 +122,7 @@ def test_load_app_config_interactively_creates_missing_config(
     monkeypatch,
 ) -> None:
     config_path = tmp_path / "config.local.json"
-    answers = iter(
-        [
-            "student",
-            "secret",
-            "2026",
-            "3",
-            "https://captcha.example.test/v1",
-            "captcha-key",
-            "captcha-model",
-        ]
-    )
+    answers = iter(["student", "secret", "2026", "3"])
 
     monkeypatch.setattr("sys.stdin.isatty", lambda: True)
     monkeypatch.setattr("builtins.input", lambda prompt: next(answers))
@@ -153,9 +134,7 @@ def test_load_app_config_interactively_creates_missing_config(
     assert config.cumt.password == "secret"
     assert config.query.year == "2026"
     assert config.query.semester == "3"
-    assert config.captcha.openai_compatible.api_key == "captcha-key"
     assert written["cumt"]["username"] == "student"
-    assert written["captcha"]["openai_compatible"]["model"] == "captcha-model"
 
 
 def test_load_app_config_interactively_completes_missing_fields(
@@ -170,7 +149,7 @@ def test_load_app_config_interactively_completes_missing_fields(
             "query": {"year": "2026", "semester": "3"},
         },
     )
-    answers = iter(["secret", "", "", ""])
+    answers = iter(["secret"])
 
     monkeypatch.setattr("sys.stdin.isatty", lambda: True)
     monkeypatch.setattr("builtins.input", lambda prompt: next(answers))
@@ -189,7 +168,7 @@ def test_load_app_config_interactive_skips_env_backed_fields(
 ) -> None:
     config_path = tmp_path / "config.local.json"
     _write_config(config_path, {"query": {"year": "2026", "semester": "3"}})
-    answers = iter(["https://captcha.example.test/v1", "captcha-key", "model"])
+    answers = iter([])
 
     monkeypatch.setattr("sys.stdin.isatty", lambda: True)
     monkeypatch.setattr("builtins.input", lambda prompt: next(answers))

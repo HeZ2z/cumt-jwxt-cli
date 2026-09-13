@@ -77,11 +77,11 @@ def test_recognize_captcha_falls_back_to_manual_input(
     monkeypatch.setattr("sys.stdin", stdin)
     monkeypatch.setattr(stdin, "isatty", lambda: True)
     monkeypatch.setattr(
-        "cumt_jwxt_cli.captcha.openai_compatible.select",
+        "cumt_jwxt_cli.captcha.manual.select",
         lambda readers, writers, errors, timeout: ([stdin], [], []),
     )
     monkeypatch.setattr(
-        "cumt_jwxt_cli.captcha.openai_compatible.NamedTemporaryFile",
+        "cumt_jwxt_cli.captcha.manual.NamedTemporaryFile",
         fake_named_tempfile,
     )
 

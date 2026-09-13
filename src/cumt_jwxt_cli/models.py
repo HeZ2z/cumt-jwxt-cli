@@ -39,21 +39,10 @@ class GradesConfig:
 
 
 @dataclass(frozen=True)
-class OpenAICompatibleConfig:
-    """OpenAI-compatible captcha service configuration."""
-
-    base_url: str
-    api_key: str
-    model: str
-
-
-@dataclass(frozen=True)
 class CaptchaConfig:
     """Captcha recognition configuration."""
 
-    provider: str
     manual_timeout_seconds: int
-    openai_compatible: OpenAICompatibleConfig
 
 
 @dataclass(frozen=True)

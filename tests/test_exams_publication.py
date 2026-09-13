@@ -28,7 +28,6 @@ from cumt_jwxt_cli.models import (
     HTTPConfig,
     LoggingConfig,
     NotifyConfig,
-    OpenAICompatibleConfig,
     OutputConfig,
     QueryConfig,
     RuntimeState,
@@ -53,11 +52,7 @@ def _app_config(
             retry_backoff_seconds=1.5,
         ),
         grades=GradesConfig(include_details_on_change=True, detail_concurrency=3),
-        captcha=CaptchaConfig(
-            provider="openai_compatible",
-            manual_timeout_seconds=60,
-            openai_compatible=OpenAICompatibleConfig(base_url="", api_key="", model=""),
-        ),
+        captcha=CaptchaConfig(manual_timeout_seconds=60),
         notify=NotifyConfig(
             enabled=notify_enabled,
             smtp_host="smtp.example.test" if notify_enabled else "",

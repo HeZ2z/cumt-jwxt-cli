@@ -17,13 +17,7 @@
     "detail_concurrency": 3
   },
   "captcha": {
-    "provider": "openai_compatible",
-    "manual_timeout_seconds": 60,
-    "openai_compatible": {
-      "base_url": "",
-      "api_key": "",
-      "model": ""
-    }
+    "manual_timeout_seconds": 60
   },
   "notify": {
     "enabled": false,
