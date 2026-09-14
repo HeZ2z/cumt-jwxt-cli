@@ -145,7 +145,7 @@ def test_main_shows_help_for_grades_command(capsys) -> None:
     captured = capsys.readouterr()
 
     assert exit_code == int(ExitCode.OK)
-    assert "usage: cumt-jwxt grades" in captured.out
+    assert "用法: cumt-jwxt grades" in captured.out
     assert captured.err == ""
 
 
@@ -389,7 +389,7 @@ def test_main_shows_help_for_exams_command(capsys) -> None:
     captured = capsys.readouterr()
 
     assert exit_code == int(ExitCode.OK)
-    assert "usage: cumt-jwxt exams" in captured.out
+    assert "用法: cumt-jwxt exams" in captured.out
     assert captured.err == ""
 
 
@@ -565,7 +565,7 @@ def test_main_shows_help_for_schedule_command(capsys) -> None:
     captured = capsys.readouterr()
 
     assert exit_code == int(ExitCode.OK)
-    assert "usage: cumt-jwxt schedule" in captured.out
+    assert "用法: cumt-jwxt schedule" in captured.out
     assert captured.err == ""
 
 

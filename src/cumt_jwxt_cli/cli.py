@@ -38,194 +38,252 @@ from cumt_jwxt_cli.schedule.query_state import (
 )
 from cumt_jwxt_cli.schedule.report import build_schedule_text_summary
 
+_USAGE_PREFIX = "用法: "
+_HELP_FLAG_HELP = "显示帮助信息并退出。"
+
+
+class _ChineseHelpFormatter(argparse.HelpFormatter):
+    """Render argparse's auto-generated usage label in Chinese."""
+
+    def _format_usage(self, usage, actions, groups, prefix):
+        return super()._format_usage(
+            usage,
+            actions,
+            groups,
+            _USAGE_PREFIX if prefix is None else prefix,
+        )
+
+
+def _localize_help(parser: argparse.ArgumentParser) -> argparse.ArgumentParser:
+    """Switch argparse's generated help scaffolding to Chinese."""
+
+    parser._positionals.title = "位置参数"
+    parser._optionals.title = "选项"
+    parser.add_argument("-h", "--help", action="help", help=_HELP_FLAG_HELP)
+    return parser
+
+
+def _add_subparser(
+    subparsers: argparse._SubParsersAction,
+    name: str,
+    **kwargs: object,
+) -> argparse.ArgumentParser:
+    parser = subparsers.add_parser(
+        name,
+        add_help=False,
+        formatter_class=_ChineseHelpFormatter,
+        **kwargs,
+    )
+    return _localize_help(parser)
+
 
 def build_parser() -> argparse.ArgumentParser:
     """Build the CLI argument parser."""
     parser = argparse.ArgumentParser(
         prog="cumt-jwxt",
-        description="CUMT JWXT command line tools.",
+        description="CUMT 教务系统命令行工具。",
+        add_help=False,
+        formatter_class=_ChineseHelpFormatter,
     )
+    _localize_help(parser)
     parser.set_defaults(handler=_print_help, parser=parser)
 
     subparsers = parser.add_subparsers(dest="command")
 
-    grades_parser = subparsers.add_parser("grades", help="Manage grade queries.")
+    grades_parser = _add_subparser(subparsers, "grades", help="查询和管理成绩。")
     grades_parser.set_defaults(handler=_print_help, parser=grades_parser)
     grades_subparsers = grades_parser.add_subparsers(dest="grades_command")
 
-    query_parser = grades_subparsers.add_parser(
+    query_parser = _add_subparser(
+        grades_subparsers,
         "query",
-        help="Query grades from CUMT JWXT.",
-        description="Query grades from CUMT JWXT.",
+        help="查询 CUMT 教务系统成绩。",
+        description="查询 CUMT 教务系统成绩。",
     )
     query_parser.add_argument(
         "--config",
         help=(
-            "Path to the local configuration file. Defaults to config.local.json "
-            "or config.json in the current or project directory."
+            "本地配置文件路径。默认读取当前目录或项目目录下的 "
+            "config.local.json 或 config.json。"
         ),
     )
-    query_parser.add_argument("--year", help="Academic year, for example 2024.")
-    query_parser.add_argument("--semester", help="Semester code, for example 12.")
+    query_parser.add_argument(
+        "--year",
+        help="学年起始年，例如 2024。优先于 query.auto。",
+    )
+    query_parser.add_argument(
+        "--semester",
+        help="学期代码：3 为秋季，12 为春季。优先于 query.auto。",
+    )
     query_parser.add_argument(
         "--force-email",
         action="store_true",
-        help="Send notification even if no grade changes are detected.",
+        help="未检测到成绩变化时也发送通知邮件。",
     )
     query_parser.add_argument(
         "--no-proxy",
         action="store_true",
-        help="Do not use proxy settings from environment variables.",
+        help="不使用环境变量中的代理设置。",
     )
     query_parser.add_argument(
         "--no-interactive",
         action="store_true",
-        help="Fail fast instead of prompting for missing configuration.",
+        help="缺少配置时直接失败，不进行交互式输入。",
     )
     query_parser.add_argument(
         "--save-json",
         action="store_true",
-        help="Save grade JSON output to the configured output directory.",
+        help="将成绩 JSON 保存到配置的输出目录。",
     )
     query_parser.add_argument(
         "--save-report",
         action="store_true",
-        help="Save an HTML report to the configured output directory.",
+        help="将 HTML 报告保存到配置的输出目录。",
     )
     query_parser.add_argument(
         "--output-dir",
-        help="Directory for optional JSON or report output.",
+        help="可选 JSON 或报告的输出目录。",
     )
     query_parser.add_argument(
         "--verbose",
         action="store_true",
-        help="Enable verbose output.",
+        help="输出更详细的日志。",
     )
     query_parser.set_defaults(handler=_handle_grades_query, parser=query_parser)
 
-    exams_parser = subparsers.add_parser("exams", help="Manage exam schedule queries.")
+    exams_parser = _add_subparser(subparsers, "exams", help="查询和管理考试安排。")
     exams_parser.set_defaults(handler=_print_help, parser=exams_parser)
     exams_subparsers = exams_parser.add_subparsers(dest="exams_command")
 
-    exams_query_parser = exams_subparsers.add_parser(
+    exams_query_parser = _add_subparser(
+        exams_subparsers,
         "query",
-        help="Query exam schedule from CUMT JWXT.",
-        description="Query exam schedule from CUMT JWXT.",
+        help="查询 CUMT 教务系统考试安排。",
+        description="查询 CUMT 教务系统考试安排。",
     )
     exams_query_parser.add_argument(
         "--config",
         help=(
-            "Path to the local configuration file. Defaults to config.local.json "
-            "or config.json in the current or project directory."
+            "本地配置文件路径。默认读取当前目录或项目目录下的 "
+            "config.local.json 或 config.json。"
         ),
     )
-    exams_query_parser.add_argument("--year", help="Academic year, for example 2025.")
-    exams_query_parser.add_argument("--semester", help="Semester code, for example 12.")
+    exams_query_parser.add_argument(
+        "--year",
+        help="学年起始年，例如 2025。优先于 query.auto。",
+    )
+    exams_query_parser.add_argument(
+        "--semester",
+        help="学期代码：3 为秋季，12 为春季。优先于 query.auto。",
+    )
     exams_query_parser.add_argument(
         "--force-email",
         action="store_true",
-        help="Send notification even if no exam changes are detected.",
+        help="未检测到考试变化时也发送通知邮件。",
     )
     exams_query_parser.add_argument(
         "--no-proxy",
         action="store_true",
-        help="Do not use proxy settings from environment variables.",
+        help="不使用环境变量中的代理设置。",
     )
     exams_query_parser.add_argument(
         "--no-interactive",
         action="store_true",
-        help="Fail fast instead of prompting for missing configuration.",
+        help="缺少配置时直接失败，不进行交互式输入。",
     )
     exams_query_parser.add_argument(
         "--save-json",
         action="store_true",
-        help="Save exam JSON output to the configured output directory.",
+        help="将考试安排 JSON 保存到配置的输出目录。",
     )
     exams_query_parser.add_argument(
         "--save-report",
         action="store_true",
-        help="Save an HTML report to the configured output directory.",
+        help="将 HTML 报告保存到配置的输出目录。",
     )
     exams_query_parser.add_argument(
         "--save-ics",
         action="store_true",
-        help="Save an ICS calendar file to the configured output directory.",
+        help="将 ICS 日历文件保存到配置的输出目录。",
     )
     exams_query_parser.add_argument(
         "--output-dir",
-        help="Directory for optional JSON or report output.",
+        help="可选 JSON 或报告的输出目录。",
     )
     exams_query_parser.add_argument(
         "--verbose",
         action="store_true",
-        help="Enable verbose output.",
+        help="输出更详细的日志。",
     )
     exams_query_parser.set_defaults(
         handler=_handle_exams_query, parser=exams_query_parser
     )
 
-    schedule_parser = subparsers.add_parser(
-        "schedule", help="Manage personal schedule queries."
+    schedule_parser = _add_subparser(
+        subparsers, "schedule", help="查询和管理个人课表。"
     )
     schedule_parser.set_defaults(handler=_print_help, parser=schedule_parser)
     schedule_subparsers = schedule_parser.add_subparsers(dest="schedule_command")
 
-    schedule_query_parser = schedule_subparsers.add_parser(
+    schedule_query_parser = _add_subparser(
+        schedule_subparsers,
         "query",
-        help="Query personal schedule from CUMT JWXT.",
-        description="Query personal schedule from CUMT JWXT.",
+        help="查询 CUMT 教务系统个人课表。",
+        description="查询 CUMT 教务系统个人课表。",
     )
     schedule_query_parser.add_argument(
         "--config",
         help=(
-            "Path to the local configuration file. Defaults to config.local.json "
-            "or config.json in the current or project directory."
+            "本地配置文件路径。默认读取当前目录或项目目录下的 "
+            "config.local.json 或 config.json。"
         ),
     )
     schedule_query_parser.add_argument(
-        "--year", help="Academic year, for example 2025."
+        "--year",
+        help="学年起始年，例如 2025。优先于 query.auto。",
     )
     schedule_query_parser.add_argument(
-        "--semester", help="Semester code, for example 12."
+        "--semester",
+        help="学期代码：3 为秋季，12 为春季。优先于 query.auto。",
     )
     schedule_query_parser.add_argument(
         "--force-email",
         action="store_true",
-        help="Send notification even if no schedule changes are detected.",
+        help="未检测到课表变化时也发送通知邮件。",
     )
     schedule_query_parser.add_argument(
         "--no-proxy",
         action="store_true",
-        help="Do not use proxy settings from environment variables.",
+        help="不使用环境变量中的代理设置。",
     )
     schedule_query_parser.add_argument(
         "--no-interactive",
         action="store_true",
-        help="Fail fast instead of prompting for missing configuration.",
+        help="缺少配置时直接失败，不进行交互式输入。",
     )
     schedule_query_parser.add_argument(
         "--save-json",
         action="store_true",
-        help="Save schedule JSON output to the configured output directory.",
+        help="将课表 JSON 保存到配置的输出目录。",
     )
     schedule_query_parser.add_argument(
         "--save-report",
         action="store_true",
-        help="Save an HTML report to the configured output directory.",
+        help="将 HTML 报告保存到配置的输出目录。",
     )
     schedule_query_parser.add_argument(
         "--save-ics",
         action="store_true",
-        help="Save an ICS calendar file to the configured output directory.",
+        help="将 ICS 日历文件保存到配置的输出目录。",
     )
     schedule_query_parser.add_argument(
         "--output-dir",
-        help="Directory for optional JSON or report output.",
+        help="可选 JSON 或报告的输出目录。",
     )
     schedule_query_parser.add_argument(
         "--verbose",
         action="store_true",
-        help="Enable verbose output.",
+        help="输出更详细的日志。",
     )
     schedule_query_parser.set_defaults(
         handler=_handle_schedule_query, parser=schedule_query_parser
