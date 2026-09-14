@@ -378,9 +378,7 @@ class TestSaveOptionalOutputs:
 
         save_optional_outputs(config, result, artifacts)
 
-        ics = (tmp_path / "output" / "schedule_25fa.ics").read_text(
-            encoding="utf-8", newline=""
-        )
+        ics = (tmp_path / "output" / "schedule_25fa.ics").read_bytes().decode("utf-8")
         assert "BEGIN:VCALENDAR" in ics
         assert "END:VCALENDAR" in ics
 
@@ -398,9 +396,7 @@ class TestSaveOptionalOutputs:
 
         save_optional_outputs(config, result, artifacts)
 
-        ics = (tmp_path / "output" / "schedule_25fa.ics").read_text(
-            encoding="utf-8", newline=""
-        )
+        ics = (tmp_path / "output" / "schedule_25fa.ics").read_bytes().decode("utf-8")
         # Default newline translation turned icalendar's CRLF into CRCRLF.
         assert "\r\r\n" not in ics
         assert ics == artifacts.ics_content
