@@ -63,15 +63,20 @@ def query_grade_details_if_needed(
     force: bool,
     executor_factory: Callable[..., object] = ThreadPoolExecutor,
 ) -> tuple[GradeDetail, ...]:
+    """Fetch grade details for every displayed course when details are included.
+
+    Details must cover all courses, not only the changed ones: the report renders
+    the current-grade cards for the whole list, so fetching a subset would drop
+    the score composition for every unchanged course.
+    """
+
     if not config.grades.include_details_on_change:
         return ()
     if not result.changes and not force:
         return ()
 
     grades = tuple(
-        grade
-        for grade in grades_for_detail_query(result, force=force)
-        if grade.teaching_class_id is not None
+        grade for grade in result.grades if grade.teaching_class_id is not None
     )
     if not grades:
         return ()
@@ -83,21 +88,6 @@ def query_grade_details_if_needed(
             grades,
         )
     return tuple(detail for detail in details if detail is not None)
-
-
-def grades_for_detail_query(
-    result: GradeQueryResult,
-    *,
-    force: bool,
-) -> tuple[CourseGrade, ...]:
-    if force:
-        return result.grades
-    changed_keys = {
-        change.after.course_code
-        for change in result.changes
-        if change.after is not None
-    }
-    return tuple(grade for grade in result.grades if grade.course_code in changed_keys)
 
 
 def query_grade_detail(

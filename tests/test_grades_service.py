@@ -523,7 +523,7 @@ def test_run_grade_query_uses_explicit_output_dir_for_json_output(
     assert not (tmp_path / "output" / "grades_24sp.json").exists()
 
 
-def test_run_grade_query_fetches_details_for_changed_courses(tmp_path) -> None:
+def test_run_grade_query_fetches_details_for_all_courses_on_change(tmp_path) -> None:
     config = _app_config(tmp_path / "config.local.json")
     client = _QueryClient(
         {
@@ -563,15 +563,66 @@ def test_run_grade_query_fetches_details_for_changed_courses(tmp_path) -> None:
     detail_posts = [
         post for post in client.posts if post[0].endswith("cjcx_cxCjxqGjh.html")
     ]
-    assert len(detail_posts) == 1
-    assert detail_posts[0][1] == {
-        "jxb_id": "JXB-1",
-        "xnm": "2024",
-        "xqm": "12",
-        "kcmc": "高等数学",
-    }
-    assert detail_posts[0][2]["gnmkdm"] == "N305005"
-    assert result.details[0].course_code == "A001"
+    assert {post[1]["jxb_id"] for post in detail_posts} == {"JXB-1", "JXB-2"}
+    assert {post[1]["kcmc"] for post in detail_posts} == {"高等数学", "大学英语"}
+    assert all(post[1]["xnm"] == "2024" for post in detail_posts)
+    assert all(post[1]["xqm"] == "12" for post in detail_posts)
+    assert all(post[2]["gnmkdm"] == "N305005" for post in detail_posts)
+    assert {detail.course_code for detail in result.details} == {"A001", "B002"}
+
+
+def test_run_grade_query_email_keeps_grade_composition_for_unchanged_course(
+    tmp_path,
+) -> None:
+    config = _app_config(
+        tmp_path / "config.local.json", notify_enabled=True
+    )
+    client = _QueryClient(
+        {
+            "items": [
+                {
+                    "kch": "A001",
+                    "kcmc": "高等数学",
+                    "cj": "95",
+                    "jxb_id": "JXB-1",
+                },
+                {
+                    "kch": "B002",
+                    "kcmc": "大学英语",
+                    "cj": "88",
+                    "jxb_id": "JXB-2",
+                },
+            ]
+        },
+        detail_html="""
+        <span class="red2">课程</span>
+        <table id="subtab">
+          <tbody><tr><td>期末</td><td>100%</td><td>95</td></tr></tbody>
+        </table>
+        """,
+    )
+    captured: dict[str, str] = {}
+
+    def collect_email(
+        *args: object, subject: str, html_body: str, **kwargs: object
+    ) -> None:
+        captured["subject"] = subject
+        captured["html"] = html_body
+
+    run_grade_query(
+        config,
+        client,
+        previous_state=_state((_entry("B002", "大学英语", "88"),)),
+        force_email=False,
+        now_factory=lambda: __import__("datetime").datetime.fromisoformat(
+            "2026-05-07T12:00:00+08:00"
+        ),
+        send_email_fn=collect_email,
+    )
+
+    assert captured["subject"] == "CUMT 成绩报告 2024-2025学年 第二学期"
+    current_section = captured["html"].split("当前成绩", 1)[1]
+    assert current_section.count("成绩构成") == 2
 
 
 def test_run_grade_query_skips_details_when_no_changes(tmp_path) -> None:
