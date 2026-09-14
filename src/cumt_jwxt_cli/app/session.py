@@ -13,7 +13,10 @@ from cumt_jwxt_cli.models import (
     AppConfig,
     ExamQueryResult,
     GradeQueryResult,
+    ScheduleQueryResult,
 )
+from cumt_jwxt_cli.schedule.query_fetch import is_schedule_session_query_failure
+from cumt_jwxt_cli.schedule.service import run_schedule_query
 from cumt_jwxt_cli.state import load_runtime_state
 from cumt_jwxt_cli.time_utils import utc_now_iso
 
@@ -122,6 +125,57 @@ def query_exams_with_session_reuse(
             client.reset_session()
             _login(config, client)
             return run_exam_query(
+                config,
+                client,
+                previous_state=previous_state,
+                session_cookies=client.export_cookies(),
+                session_updated_at=_now_iso(),
+                force_email=force_email,
+            )
+
+
+def query_schedule_with_session_reuse(
+    config: AppConfig,
+    *,
+    force_email: bool,
+    trust_env: bool,
+) -> ScheduleQueryResult:
+    """Load state, reuse session cookies, and retry once after session expiry."""
+
+    previous_state = load_runtime_state(config)
+    with JWXTClient(
+        timeout_seconds=config.http.timeout_seconds,
+        retry_attempts=config.http.retry_attempts,
+        retry_backoff_seconds=config.http.retry_backoff_seconds,
+        trust_env=trust_env,
+    ) as client:
+        client.load_cookies(previous_state.session_cookies)
+        client.check_reachable()
+
+        session_updated_at = None
+        if not previous_state.session_cookies:
+            _login(config, client)
+            session_updated_at = _now_iso()
+
+        try:
+            return run_schedule_query(
+                config,
+                client,
+                previous_state=previous_state,
+                session_cookies=client.export_cookies(),
+                session_updated_at=session_updated_at,
+                force_email=force_email,
+            )
+        except QueryError as exc:
+            if (
+                not previous_state.session_cookies
+                or not is_schedule_session_query_failure(exc)
+            ):
+                raise
+
+            client.reset_session()
+            _login(config, client)
+            return run_schedule_query(
                 config,
                 client,
                 previous_state=previous_state,

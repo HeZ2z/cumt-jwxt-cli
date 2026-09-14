@@ -59,6 +59,7 @@ def build_grade_query_result(
         session_updated_at=previous_state.session_updated_at,
         grade_queries=grade_queries,
         exam_queries=dict(previous_state.exam_queries),
+        schedule_queries=dict(previous_state.schedule_queries),
     )
     return GradeQueryResult(
         grades=grade_records,
@@ -95,6 +96,7 @@ def state_with_session(
         ),
         grade_queries=dict(previous_state.grade_queries),
         exam_queries=dict(previous_state.exam_queries),
+        schedule_queries=dict(previous_state.schedule_queries),
     )
 
 

@@ -1,6 +1,6 @@
 """Core data models."""
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Literal
 
@@ -190,6 +190,72 @@ class GradeDetail:
 
 
 @dataclass(frozen=True)
+class PeriodTime:
+    """Start/end clock time for one class period."""
+
+    period: str
+    start: str
+    end: str
+    section: str | None = None
+
+
+@dataclass(frozen=True)
+class ScheduleSlot:
+    """One meeting slot of a scheduled course."""
+
+    weekday: int
+    periods: str
+    weeks: tuple[int, ...]
+    location: str | None
+
+
+@dataclass(frozen=True)
+class ScheduleLesson:
+    """Parsed personal schedule lesson record.
+
+    One kbList row maps to one lesson carrying exactly one slot.
+    """
+
+    course_code: str
+    course_name: str
+    teaching_class: str | None
+    teacher: str | None
+    credits: str | None
+    course_type: str | None
+    slots: tuple[ScheduleSlot, ...]
+
+
+@dataclass(frozen=True)
+class ScheduleUnscheduledCourse:
+    """Parsed sjkList practice/unscheduled course record."""
+
+    course_name: str
+    teacher: str | None
+    week_range: str | None
+    credits: str | None
+
+
+@dataclass(frozen=True)
+class ScheduleSnapshotEntry:
+    """Minimal schedule record stored for change detection."""
+
+    course_code: str
+    course_name: str
+    teaching_class: str | None
+    teacher: str | None
+    slots: tuple[ScheduleSlot, ...]
+
+
+@dataclass(frozen=True)
+class ScheduleScopeState:
+    """Persisted schedule state for one query scope."""
+
+    snapshot: tuple[ScheduleSnapshotEntry, ...]
+    last_successful_query_at: str | None
+    last_notified_at: str | None
+
+
+@dataclass(frozen=True)
 class RuntimeState:
     """Minimal runtime state safe to persist between runs."""
 
@@ -198,6 +264,9 @@ class RuntimeState:
     session_updated_at: str | None
     grade_queries: dict[GradeQueryScope, PerScopeState]
     exam_queries: dict[GradeQueryScope, ExamScopeState]
+    schedule_queries: dict[GradeQueryScope, ScheduleScopeState] = field(
+        default_factory=dict
+    )
 
 
 @dataclass(frozen=True)
@@ -244,3 +313,32 @@ class GradeQueryResult:
     changes: tuple[GradeChange, ...]
     details: tuple[GradeDetail, ...]
     state: RuntimeState
+
+
+@dataclass(frozen=True)
+class ScheduleListData:
+    """Parsed schedule payload containing scheduled and unscheduled courses."""
+
+    lessons: tuple[ScheduleLesson, ...]
+    unscheduled: tuple[ScheduleUnscheduledCourse, ...]
+
+
+@dataclass(frozen=True)
+class ScheduleChange:
+    """Structured difference between two schedule snapshots."""
+
+    change_type: Literal["added", "removed", "updated"]
+    before: ScheduleSnapshotEntry | None
+    after: ScheduleSnapshotEntry | None
+
+
+@dataclass(frozen=True)
+class ScheduleQueryResult:
+    """Pure business result for a completed schedule query workflow."""
+
+    lessons: tuple[ScheduleLesson, ...]
+    unscheduled: tuple[ScheduleUnscheduledCourse, ...]
+    snapshot: tuple[ScheduleSnapshotEntry, ...]
+    changes: tuple[ScheduleChange, ...]
+    state: RuntimeState
+    period_times: tuple[PeriodTime, ...] = ()

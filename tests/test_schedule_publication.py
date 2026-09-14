@@ -1,4 +1,4 @@
-"""Exam publication tests."""
+"""Personal schedule publication tests."""
 
 import json
 from pathlib import Path
@@ -6,32 +6,43 @@ from pathlib import Path
 import pytest
 
 from cumt_jwxt_cli.errors import NotifyError
-from cumt_jwxt_cli.exams.publication import (
-    PublicationArtifacts,
-    build_exams_json_payload,
-    build_publication_artifacts,
-    maybe_notify,
-    save_optional_outputs,
-    serialize_exam_change,
-    serialize_exam_info,
-    serialize_exam_snapshot_entry,
-)
 from cumt_jwxt_cli.models import (
     AppConfig,
     CaptchaConfig,
     CUMTConfig,
-    ExamChange,
-    ExamInfo,
-    ExamQueryResult,
-    ExamSnapshotEntry,
     GradesConfig,
     HTTPConfig,
     LoggingConfig,
     NotifyConfig,
     OutputConfig,
+    PeriodTime,
     QueryConfig,
     RuntimeState,
+    ScheduleChange,
+    ScheduleLesson,
+    ScheduleQueryResult,
+    ScheduleSlot,
+    ScheduleSnapshotEntry,
+    ScheduleUnscheduledCourse,
 )
+from cumt_jwxt_cli.schedule.publication import (
+    PublicationArtifacts,
+    build_publication_artifacts,
+    build_schedules_json_payload,
+    maybe_notify,
+    save_optional_outputs,
+    serialize_schedule_change,
+    serialize_schedule_lesson,
+    serialize_schedule_slot,
+    serialize_schedule_snapshot_entry,
+    serialize_schedule_unscheduled_course,
+)
+
+_PERIOD_TIMES = (
+    PeriodTime(period="1", start="08:00", end="08:50"),
+    PeriodTime(period="2", start="08:55", end="09:45"),
+)
+_WEEK_DATES = {1: __import__("datetime").date(2025, 9, 1)}
 
 
 def _app_config(
@@ -72,36 +83,49 @@ def _app_config(
     )
 
 
-def _exam(course_code: str, course_name: str, **kw: str | None) -> ExamInfo:
-    return ExamInfo(
-        course_code=course_code,
-        course_name=course_name,
-        exam_time=kw.get("exam_time"),
-        location=kw.get("location"),
-        campus=kw.get("campus"),
-        exam_name=kw.get("exam_name"),
-        exam_method=kw.get("exam_method"),
+def _slot(
+    weekday: int = 1,
+    periods: str = "1-2",
+    weeks: tuple[int, ...] = (1,),
+    location: str | None = "教一A101",
+) -> ScheduleSlot:
+    return ScheduleSlot(
+        weekday=weekday, periods=periods, weeks=weeks, location=location
     )
 
 
-def _entry(course_code: str, course_name: str, **kw: str | None) -> ExamSnapshotEntry:
-    return ExamSnapshotEntry(
+def _lesson(course_code: str = "A001", course_name: str = "高等数学") -> ScheduleLesson:
+    return ScheduleLesson(
         course_code=course_code,
         course_name=course_name,
-        exam_time=kw.get("exam_time"),
-        location=kw.get("location"),
-        campus=kw.get("campus"),
-        exam_name=kw.get("exam_name"),
-        exam_method=kw.get("exam_method"),
+        teaching_class="01班",
+        teacher="张三",
+        credits="5.0",
+        course_type="必修",
+        slots=(_slot(),),
+    )
+
+
+def _entry(
+    course_code: str = "A001", course_name: str = "高等数学"
+) -> ScheduleSnapshotEntry:
+    return ScheduleSnapshotEntry(
+        course_code=course_code,
+        course_name=course_name,
+        teaching_class="01班",
+        teacher="张三",
+        slots=(_slot(),),
     )
 
 
 def _result(
-    exams: tuple[ExamInfo, ...] = (),
-    changes: tuple[ExamChange, ...] = (),
-) -> ExamQueryResult:
-    return ExamQueryResult(
-        exams=exams,
+    lessons: tuple[ScheduleLesson, ...] = (),
+    unscheduled: tuple[ScheduleUnscheduledCourse, ...] = (),
+    changes: tuple[ScheduleChange, ...] = (),
+) -> ScheduleQueryResult:
+    return ScheduleQueryResult(
+        lessons=lessons,
+        unscheduled=unscheduled,
         snapshot=(),
         changes=changes,
         state=RuntimeState(
@@ -117,31 +141,34 @@ def _result(
 class TestBuildPublicationArtifacts:
     def test_builds_text_html_and_ics(self) -> None:
         config = _app_config(Path("/tmp/test/config.local.json"))
-        result = _result(
-            exams=(_exam("A001", "高等数学", exam_time="2026-06-01(08:00-10:00)"),),
-        )
+        result = _result(lessons=(_lesson(),))
         artifacts = build_publication_artifacts(
-            config, result, queried_at="2026-06-01T12:00:00"
+            config,
+            result,
+            queried_at="2026-06-01T12:00:00",
+            period_times=_PERIOD_TIMES,
+            week_dates=_WEEK_DATES,
         )
 
-        assert "CUMT exams" in artifacts.text_summary
-        assert "CUMT 考试报告" in artifacts.html_report
+        assert "CUMT 课表" in artifacts.text_summary
+        assert "CUMT 个人课表报告" in artifacts.html_report
+        assert "周一 1-2节 08:00-09:45" in artifacts.text_summary
+        assert "周一 1-2节 08:00-09:45" in artifacts.html_report
         assert "BEGIN:VCALENDAR" in artifacts.ics_content
         assert "END:VCALENDAR" in artifacts.ics_content
+        assert "BEGIN:VEVENT" in artifacts.ics_content
 
 
 class TestMaybeNotify:
     def test_skips_when_notifications_disabled(self) -> None:
         config = _app_config(Path("/tmp/test/config.local.json"), notify_enabled=False)
         result = _result(
-            changes=(
-                ExamChange(change_type="added", before=None, after=_entry("A", "X")),
-            ),
+            changes=(ScheduleChange(change_type="added", before=None, after=_entry()),),
         )
         sent: list[str] = []
 
         def fake_send(**kwargs: object) -> None:
-            sent.append(kwargs.get("subject", ""))
+            sent.append(str(kwargs.get("subject", "")))
 
         notified_at = maybe_notify(
             config,
@@ -162,7 +189,7 @@ class TestMaybeNotify:
         sent: list[str] = []
 
         def fake_send(**kwargs: object) -> None:
-            sent.append(kwargs.get("subject", ""))
+            sent.append(str(kwargs.get("subject", "")))
 
         notified_at = maybe_notify(
             config,
@@ -179,9 +206,7 @@ class TestMaybeNotify:
     def test_sends_when_changes_exist(self) -> None:
         config = _app_config(Path("/tmp/test/config.local.json"), notify_enabled=True)
         result = _result(
-            changes=(
-                ExamChange(change_type="added", before=None, after=_entry("A", "X")),
-            ),
+            changes=(ScheduleChange(change_type="added", before=None, after=_entry()),),
         )
         sent_subjects: list[str] = []
 
@@ -199,7 +224,7 @@ class TestMaybeNotify:
         )
 
         assert notified_at is not None
-        assert sent_subjects == ["CUMT 考试报告 2025-2026 第一学期"]
+        assert sent_subjects == ["CUMT 课表报告 2025-2026 第一学期"]
 
     def test_sends_when_forced(self) -> None:
         config = _app_config(Path("/tmp/test/config.local.json"), notify_enabled=True)
@@ -224,14 +249,9 @@ class TestMaybeNotify:
         assert sent == 1
 
     def test_sends_ics_attachment(self) -> None:
-        config = _app_config(
-            Path("/tmp/test/config.local.json"),
-            notify_enabled=True,
-        )
+        config = _app_config(Path("/tmp/test/config.local.json"), notify_enabled=True)
         result = _result(
-            changes=(
-                ExamChange(change_type="added", before=None, after=_entry("A", "X")),
-            ),
+            changes=(ScheduleChange(change_type="added", before=None, after=_entry()),),
         )
         captured_attachments: list[tuple[str, bytes, str]] = []
 
@@ -254,15 +274,13 @@ class TestMaybeNotify:
         )
 
         assert captured_attachments == [
-            ("exam_schedule_25fa.ics", b"BEGIN:VCALENDAR", "text/calendar")
+            ("schedule_25fa.ics", b"BEGIN:VCALENDAR", "text/calendar")
         ]
 
     def test_raises_when_send_fails(self) -> None:
         config = _app_config(Path("/tmp/test/config.local.json"), notify_enabled=True)
         result = _result(
-            changes=(
-                ExamChange(change_type="added", before=None, after=_entry("A", "X")),
-            ),
+            changes=(ScheduleChange(change_type="added", before=None, after=_entry()),),
         )
 
         def failing_send(*args: object, **kwargs: object) -> None:
@@ -283,7 +301,7 @@ class TestMaybeNotify:
 class TestSaveOptionalOutputs:
     def test_saves_nothing_when_disabled(self, tmp_path: Path) -> None:
         config = _app_config(tmp_path / "config.local.json")
-        result = _result(exams=(_exam("A001", "高数"),))
+        result = _result(lessons=(_lesson(),))
         artifacts = build_publication_artifacts(
             config, result, queried_at="2026-06-01T12:00:00"
         )
@@ -306,7 +324,7 @@ class TestSaveOptionalOutputs:
                 save_json=True, save_report=False, save_ics=False, output_dir=""
             ),
         )
-        result = _result(exams=(_exam("A001", "高数"),))
+        result = _result(lessons=(_lesson(),))
         artifacts = build_publication_artifacts(
             config, result, queried_at="2026-06-01T12:00:00"
         )
@@ -314,9 +332,9 @@ class TestSaveOptionalOutputs:
         save_optional_outputs(config, result, artifacts)
 
         payload = json.loads(
-            (tmp_path / "output" / "exams_25fa.json").read_text(encoding="utf-8")
+            (tmp_path / "output" / "schedules_25fa.json").read_text(encoding="utf-8")
         )
-        assert set(payload) == {"exams", "changes", "summary"}
+        assert set(payload) == {"lessons", "unscheduled", "changes", "summary"}
         assert "session_cookies" not in payload
         assert "username" not in json.dumps(payload)
 
@@ -335,79 +353,115 @@ class TestSaveOptionalOutputs:
                 save_json=False, save_report=True, save_ics=False, output_dir=""
             ),
         )
-        result = _result(exams=(_exam("A001", "高数"),))
+        result = _result(lessons=(_lesson(),))
         artifacts = build_publication_artifacts(
             config, result, queried_at="2026-06-01T12:00:00"
         )
 
         save_optional_outputs(config, result, artifacts)
 
-        report = (tmp_path / "output" / "exam_report_25fa.html").read_text(
+        report = (tmp_path / "output" / "schedule_report_25fa.html").read_text(
             encoding="utf-8"
         )
-        assert "CUMT 考试报告" in report
+        assert "CUMT 个人课表报告" in report
 
     def test_saves_ics(self, tmp_path: Path) -> None:
         config = _app_config(tmp_path / "config.local.json", save_ics=True)
-        result = _result(
-            exams=(_exam("A001", "高数", exam_time="2026-06-01(08:00-10:00)"),),
-        )
+        result = _result(lessons=(_lesson(),))
         artifacts = build_publication_artifacts(
-            config, result, queried_at="2026-06-01T12:00:00"
+            config,
+            result,
+            queried_at="2026-06-01T12:00:00",
+            period_times=_PERIOD_TIMES,
+            week_dates=_WEEK_DATES,
         )
 
         save_optional_outputs(config, result, artifacts)
 
-        ics = (tmp_path / "output" / "exam_schedule_25fa.ics").read_text(
-            encoding="utf-8"
+        ics = (tmp_path / "output" / "schedule_25fa.ics").read_text(
+            encoding="utf-8", newline=""
         )
         assert "BEGIN:VCALENDAR" in ics
         assert "END:VCALENDAR" in ics
 
+    def test_saves_ics_preserves_crlf_line_endings(self, tmp_path: Path) -> None:
+        config = _app_config(tmp_path / "config.local.json", save_ics=True)
+        result = _result(lessons=(_lesson(),))
+        artifacts = build_publication_artifacts(
+            config,
+            result,
+            queried_at="2026-06-01T12:00:00",
+            period_times=_PERIOD_TIMES,
+            week_dates=_WEEK_DATES,
+        )
+        assert "\r\n" in artifacts.ics_content
+
+        save_optional_outputs(config, result, artifacts)
+
+        ics = (tmp_path / "output" / "schedule_25fa.ics").read_text(
+            encoding="utf-8", newline=""
+        )
+        # Default newline translation turned icalendar's CRLF into CRCRLF.
+        assert "\r\r\n" not in ics
+        assert ics == artifacts.ics_content
+
 
 class TestSerializers:
-    def test_serialize_exam_info(self) -> None:
-        exam = _exam(
-            "A001",
-            "高数",
-            exam_time="2026-06-01(08:00)",
-            location="博1-A101",
-            campus="南湖校区",
-            exam_name="期末考试",
-            exam_method="闭卷",
-        )
-        data = serialize_exam_info(exam)
+    def test_serialize_schedule_lesson(self) -> None:
+        data = serialize_schedule_lesson(_lesson())
         assert data["course_code"] == "A001"
-        assert data["exam_method"] == "闭卷"
+        assert data["teacher"] == "张三"
+        assert data["slots"][0]["periods"] == "1-2"
 
-    def test_serialize_exam_change_added(self) -> None:
-        change = ExamChange(
-            change_type="added",
-            before=None,
-            after=_entry("A001", "高数"),
+    def test_serialize_schedule_unscheduled_course(self) -> None:
+        course = ScheduleUnscheduledCourse(
+            course_name="实践课", teacher="李四", week_range="1-4", credits="1.0"
         )
-        data = serialize_exam_change(change)
+        data = serialize_schedule_unscheduled_course(course)
+        assert data == {
+            "course_name": "实践课",
+            "teacher": "李四",
+            "week_range": "1-4",
+            "credits": "1.0",
+        }
+
+    def test_serialize_schedule_change_added(self) -> None:
+        change = ScheduleChange(change_type="added", before=None, after=_entry())
+        data = serialize_schedule_change(change)
         assert data["change_type"] == "added"
         assert data["before"] is None
         assert data["after"] is not None
 
-    def test_serialize_exam_snapshot_entry(self) -> None:
-        entry = _entry("A001", "高数", exam_time="2026-06-01(08:00)")
-        data = serialize_exam_snapshot_entry(entry)
+    def test_serialize_schedule_snapshot_entry(self) -> None:
+        data = serialize_schedule_snapshot_entry(_entry())
         assert data["course_code"] == "A001"
-        assert data["exam_time"] == "2026-06-01(08:00)"
+        assert data["slots"] == [
+            {
+                "weekday": 1,
+                "periods": "1-2",
+                "weeks": [1],
+                "location": "教一A101",
+            }
+        ]
 
-    def test_build_exams_json_payload_structure(self) -> None:
+    def test_serialize_schedule_slot(self) -> None:
+        data = serialize_schedule_slot(_slot())
+        assert data["weekday"] == 1
+        assert data["weeks"] == [1]
+
+    def test_build_schedules_json_payload_structure(self) -> None:
         result = _result(
-            exams=(_exam("A001", "高数"),),
-            changes=(
-                ExamChange(
-                    change_type="added",
-                    before=None,
-                    after=_entry("A001", "高数"),
+            lessons=(_lesson(),),
+            unscheduled=(
+                ScheduleUnscheduledCourse(
+                    course_name="实践课",
+                    teacher=None,
+                    week_range=None,
+                    credits=None,
                 ),
             ),
+            changes=(ScheduleChange(change_type="added", before=None, after=_entry()),),
         )
-        payload = build_exams_json_payload(result, "summary text")
-        assert set(payload) == {"exams", "changes", "summary"}
+        payload = build_schedules_json_payload(result, "summary text")
+        assert set(payload) == {"lessons", "unscheduled", "changes", "summary"}
         assert payload["summary"] == "summary text"

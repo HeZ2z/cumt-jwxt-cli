@@ -79,7 +79,7 @@ def _state(
             )
         }
     return RuntimeState(
-        schema_version=4,
+        schema_version=5,
         session_cookies={} if session_cookies is None else session_cookies,
         session_updated_at=None,
         grade_queries={} if grade_queries is None else grade_queries,
@@ -188,7 +188,7 @@ def test_build_exam_query_result_rejects_invalid_timestamp() -> None:
 def test_build_exam_query_result_preserves_grade_queries() -> None:
     autumn = _scope("2025", "12")
     previous_state = RuntimeState(
-        schema_version=4,
+        schema_version=5,
         session_cookies={},
         session_updated_at=None,
         grade_queries={
@@ -237,7 +237,7 @@ def test_build_exam_query_result_overrides_notified_at() -> None:
 def test_state_with_session_preserves_exam_and_grade_queries() -> None:
     scope = _scope()
     prev = RuntimeState(
-        schema_version=4,
+        schema_version=5,
         session_cookies={"old": "cookie"},
         session_updated_at="2026-01-01T00:00:00+08:00",
         grade_queries={},
@@ -269,7 +269,7 @@ def test_exam_query_scope_from_config() -> None:
 def test_get_exam_query_state() -> None:
     scope = _scope()
     state = RuntimeState(
-        schema_version=4,
+        schema_version=5,
         session_cookies={},
         session_updated_at=None,
         grade_queries={},
@@ -289,7 +289,7 @@ def test_get_exam_query_state() -> None:
 
 def test_get_exam_query_state_returns_none_when_missing() -> None:
     state = RuntimeState(
-        schema_version=4,
+        schema_version=5,
         session_cookies={},
         session_updated_at=None,
         grade_queries={},

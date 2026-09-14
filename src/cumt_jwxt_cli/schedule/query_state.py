@@ -1,10 +1,9 @@
-"""Pure helpers for exam query state and result assembly."""
+"""Pure helpers for schedule query state and result assembly."""
 
 from __future__ import annotations
 
 from collections.abc import Iterable
 
-from cumt_jwxt_cli.exams.snapshot import compare_exam_snapshots, create_exam_snapshot
 from cumt_jwxt_cli.grades.query_state import (
     now_iso,
     optional_iso_timestamp,
@@ -12,54 +11,63 @@ from cumt_jwxt_cli.grades.query_state import (
     state_with_session,
 )
 from cumt_jwxt_cli.models import (
-    ExamInfo,
-    ExamQueryResult,
-    ExamScopeState,
     GradeQueryScope,
+    PeriodTime,
     RuntimeState,
+    ScheduleLesson,
+    ScheduleQueryResult,
+    ScheduleScopeState,
+    ScheduleUnscheduledCourse,
+)
+from cumt_jwxt_cli.schedule.snapshot import (
+    compare_schedule_snapshots,
+    create_schedule_snapshot,
 )
 
 # Re-export shared helpers from grades.query_state
 __all__ = [
-    "build_exam_query_result",
-    "exam_query_scope_from_config",
-    "get_exam_query_state",
+    "build_schedule_query_result",
+    "get_schedule_query_state",
     "now_iso",
-    "required_iso_timestamp",
     "optional_iso_timestamp",
+    "required_iso_timestamp",
+    "schedule_query_scope_from_config",
     "state_with_session",
 ]
 
 
-def build_exam_query_result(
-    exams: Iterable[ExamInfo],
+def build_schedule_query_result(
+    lessons: Iterable[ScheduleLesson],
+    unscheduled: Iterable[ScheduleUnscheduledCourse],
     previous_state: RuntimeState,
     scope: GradeQueryScope,
     queried_at: str,
     notified_at: str | None = None,
-) -> ExamQueryResult:
-    """Build snapshot, changes, and next runtime state from parsed exams."""
+    period_times: Iterable[PeriodTime] = (),
+) -> ScheduleQueryResult:
+    """Build snapshot, changes, and next runtime state from parsed lessons."""
 
-    exam_records = tuple(exams)
-    current_snapshot = create_exam_snapshot(list(exam_records))
-    previous_scope_state = previous_state.exam_queries.get(
+    lesson_records = tuple(lessons)
+    unscheduled_records = tuple(unscheduled)
+    current_snapshot = create_schedule_snapshot(lesson_records)
+    previous_scope_state = previous_state.schedule_queries.get(
         scope,
-        ExamScopeState(
+        ScheduleScopeState(
             snapshot=(),
             last_successful_query_at=None,
             last_notified_at=None,
         ),
     )
     changes = tuple(
-        compare_exam_snapshots(previous_scope_state.snapshot, current_snapshot)
+        compare_schedule_snapshots(previous_scope_state.snapshot, current_snapshot)
     )
     normalized_queried_at = required_iso_timestamp(
         queried_at, "last_successful_query_at"
     )
     normalized_notified_at = optional_iso_timestamp(notified_at, "last_notified_at")
 
-    exam_queries = dict(previous_state.exam_queries)
-    exam_queries[scope] = ExamScopeState(
+    schedule_queries = dict(previous_state.schedule_queries)
+    schedule_queries[scope] = ScheduleScopeState(
         snapshot=current_snapshot,
         last_successful_query_at=normalized_queried_at,
         last_notified_at=(
@@ -73,23 +81,25 @@ def build_exam_query_result(
         session_cookies=dict(previous_state.session_cookies),
         session_updated_at=previous_state.session_updated_at,
         grade_queries=dict(previous_state.grade_queries),
-        exam_queries=exam_queries,
-        schedule_queries=dict(previous_state.schedule_queries),
+        exam_queries=dict(previous_state.exam_queries),
+        schedule_queries=schedule_queries,
     )
-    return ExamQueryResult(
-        exams=exam_records,
+    return ScheduleQueryResult(
+        lessons=lesson_records,
+        unscheduled=unscheduled_records,
         snapshot=current_snapshot,
         changes=changes,
         state=next_state,
+        period_times=tuple(period_times),
     )
 
 
-def exam_query_scope_from_config(year: str, semester: str) -> GradeQueryScope:
+def schedule_query_scope_from_config(year: str, semester: str) -> GradeQueryScope:
     return GradeQueryScope(year=year, semester=semester)
 
 
-def get_exam_query_state(
+def get_schedule_query_state(
     state: RuntimeState,
     scope: GradeQueryScope,
-) -> ExamScopeState | None:
-    return state.exam_queries.get(scope)
+) -> ScheduleScopeState | None:
+    return state.schedule_queries.get(scope)

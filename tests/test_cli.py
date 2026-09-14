@@ -12,8 +12,12 @@ from cumt_jwxt_cli.models import (
     ExamInfo,
     ExamScopeState,
     GradeQueryScope,
+    PeriodTime,
     PerScopeState,
     RuntimeState,
+    ScheduleLesson,
+    ScheduleScopeState,
+    ScheduleSlot,
 )
 
 
@@ -39,12 +43,34 @@ def _empty_exam_query_result() -> SimpleNamespace:
         exams=(),
         changes=(),
         state=RuntimeState(
-            schema_version=4,
+            schema_version=5,
             session_cookies={},
             session_updated_at=None,
             grade_queries={},
             exam_queries={
                 GradeQueryScope(year="2025", semester="12"): ExamScopeState(
+                    snapshot=(),
+                    last_successful_query_at="2026-06-01T12:00:00+08:00",
+                    last_notified_at=None,
+                )
+            },
+        ),
+    )
+
+
+def _empty_schedule_query_result() -> SimpleNamespace:
+    return SimpleNamespace(
+        lessons=(),
+        changes=(),
+        period_times=(),
+        state=RuntimeState(
+            schema_version=5,
+            session_cookies={},
+            session_updated_at=None,
+            grade_queries={},
+            exam_queries={},
+            schedule_queries={
+                GradeQueryScope(year="2025", semester="12"): ScheduleScopeState(
                     snapshot=(),
                     last_successful_query_at="2026-06-01T12:00:00+08:00",
                     last_notified_at=None,
@@ -477,6 +503,245 @@ def test_exams_query_maps_runtime_errors_to_exit_codes(
     )
 
     exit_code = main(["exams", "query", "--config", str(config_path)])
+    captured = capsys.readouterr()
+
+    assert exit_code == int(expected_code)
+    assert str(raised) in captured.err
+
+
+# -- schedule -------------------------------------------------------------
+
+
+def test_build_parser_parses_schedule_query() -> None:
+    parser = build_parser()
+
+    args = parser.parse_args(["schedule", "query"])
+
+    assert args.command == "schedule"
+    assert args.schedule_command == "query"
+
+
+def test_schedule_query_parses_key_arguments() -> None:
+    parser = build_parser()
+
+    args = parser.parse_args(
+        [
+            "schedule",
+            "query",
+            "--config",
+            "config.test.json",
+            "--year",
+            "2025",
+            "--semester",
+            "12",
+            "--force-email",
+            "--no-proxy",
+            "--no-interactive",
+            "--save-json",
+            "--save-report",
+            "--save-ics",
+            "--output-dir",
+            "./out",
+            "--verbose",
+        ]
+    )
+
+    assert args.config == "config.test.json"
+    assert args.year == "2025"
+    assert args.semester == "12"
+    assert args.force_email is True
+    assert args.no_proxy is True
+    assert args.no_interactive is True
+    assert args.save_json is True
+    assert args.save_report is True
+    assert args.save_ics is True
+    assert args.output_dir == "./out"
+    assert args.verbose is True
+
+
+def test_main_shows_help_for_schedule_command(capsys) -> None:
+    exit_code = main(["schedule"])
+
+    captured = capsys.readouterr()
+
+    assert exit_code == int(ExitCode.OK)
+    assert "usage: cumt-jwxt schedule" in captured.out
+    assert captured.err == ""
+
+
+def test_main_runs_schedule_query_workflow(capsys, tmp_path, monkeypatch) -> None:
+    config_path = tmp_path / "config.local.json"
+    config_path.write_text(
+        json.dumps(
+            {
+                "cumt": {"username": "student", "password": "secret"},
+                "query": {"year": "2025", "semester": "12"},
+                "notify": {"enabled": False},
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    monkeypatch.setattr(cli_module, "configure_logging", lambda **kwargs: None)
+    monkeypatch.setattr(
+        cli_module,
+        "query_schedule_with_session_reuse",
+        lambda config, *, force_email, trust_env: _empty_schedule_query_result(),
+    )
+
+    exit_code = main(["schedule", "query", "--config", str(config_path)])
+
+    captured = capsys.readouterr()
+
+    assert exit_code == int(ExitCode.OK)
+    assert "CUMT 课表 2025-2026 第二学期" in captured.out
+    assert captured.err == ""
+
+
+def test_main_schedule_query_includes_clock_times(
+    capsys, tmp_path, monkeypatch
+) -> None:
+    config_path = tmp_path / "config.local.json"
+    config_path.write_text(
+        json.dumps(
+            {
+                "cumt": {"username": "student", "password": "secret"},
+                "query": {"year": "2025", "semester": "12"},
+                "notify": {"enabled": False},
+            }
+        ),
+        encoding="utf-8",
+    )
+    lesson = ScheduleLesson(
+        course_code="A001",
+        course_name="高等数学",
+        teaching_class=None,
+        teacher=None,
+        credits=None,
+        course_type=None,
+        slots=(
+            ScheduleSlot(weekday=1, periods="1-2", weeks=(1,), location="教一A101"),
+        ),
+    )
+    result = SimpleNamespace(
+        lessons=(lesson,),
+        changes=(),
+        period_times=(
+            PeriodTime(period="1", start="08:00", end="08:50"),
+            PeriodTime(period="2", start="08:55", end="09:45"),
+        ),
+        state=RuntimeState(
+            schema_version=5,
+            session_cookies={},
+            session_updated_at=None,
+            grade_queries={},
+            exam_queries={},
+            schedule_queries={
+                GradeQueryScope(year="2025", semester="12"): ScheduleScopeState(
+                    snapshot=(),
+                    last_successful_query_at="2026-06-01T12:00:00+08:00",
+                    last_notified_at=None,
+                )
+            },
+        ),
+    )
+
+    monkeypatch.setattr(cli_module, "configure_logging", lambda **kwargs: None)
+    monkeypatch.setattr(
+        cli_module,
+        "query_schedule_with_session_reuse",
+        lambda config, *, force_email, trust_env: result,
+    )
+
+    exit_code = main(["schedule", "query", "--config", str(config_path)])
+
+    captured = capsys.readouterr()
+
+    assert exit_code == int(ExitCode.OK)
+    assert "周一 1-2节 08:00-09:45 第1周 教一A101" in captured.out
+
+
+def test_schedule_query_no_proxy(capsys, tmp_path, monkeypatch) -> None:
+    config_path = tmp_path / "config.local.json"
+    config_path.write_text(
+        json.dumps(
+            {
+                "cumt": {"username": "student", "password": "secret"},
+                "query": {"year": "2025", "semester": "12"},
+            }
+        ),
+        encoding="utf-8",
+    )
+    calls: list[dict[str, object]] = []
+
+    monkeypatch.setattr(cli_module, "configure_logging", lambda **kwargs: None)
+
+    def fake_query_schedule(
+        config: object,
+        *,
+        force_email: bool,
+        trust_env: bool,
+    ) -> SimpleNamespace:
+        calls.append({"force_email": force_email, "trust_env": trust_env})
+        return _empty_schedule_query_result()
+
+    monkeypatch.setattr(
+        cli_module,
+        "query_schedule_with_session_reuse",
+        fake_query_schedule,
+    )
+
+    main(["schedule", "query", "--config", str(config_path), "--no-proxy"])
+
+    assert calls == [{"force_email": False, "trust_env": False}]
+
+
+@pytest.mark.parametrize(
+    ("raised", "expected_code"),
+    [
+        (cli_module.AuthError("auth"), ExitCode.AUTH_ERROR),
+        (cli_module.QueryError("query"), ExitCode.QUERY_ERROR),
+        (cli_module.ParseError("parse"), ExitCode.PARSE_ERROR),
+        (cli_module.NotifyError("notify"), ExitCode.NOTIFY_ERROR),
+        (cli_module.StateError("state"), ExitCode.UNKNOWN),
+        (cli_module.SnapshotError("snapshot"), ExitCode.UNKNOWN),
+    ],
+)
+def test_schedule_query_maps_runtime_errors_to_exit_codes(
+    capsys,
+    tmp_path,
+    monkeypatch,
+    raised: Exception,
+    expected_code: ExitCode,
+) -> None:
+    config_path = tmp_path / "config.local.json"
+    config_path.write_text(
+        json.dumps(
+            {
+                "cumt": {"username": "student", "password": "secret"},
+                "query": {"year": "2025", "semester": "12"},
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    monkeypatch.setattr(cli_module, "configure_logging", lambda **kwargs: None)
+
+    def raise_runtime_error(
+        config: object,
+        *,
+        force_email: bool,
+        trust_env: bool,
+    ) -> None:
+        raise raised
+
+    monkeypatch.setattr(
+        cli_module,
+        "query_schedule_with_session_reuse",
+        raise_runtime_error,
+    )
+
+    exit_code = main(["schedule", "query", "--config", str(config_path)])
     captured = capsys.readouterr()
 
     assert exit_code == int(expected_code)

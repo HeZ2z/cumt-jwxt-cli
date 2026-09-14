@@ -78,7 +78,7 @@ def _state(
             )
         }
     return RuntimeState(
-        schema_version=4,
+        schema_version=5,
         session_cookies={} if session_cookies is None else session_cookies,
         session_updated_at=session_updated_at,
         grade_queries=grade_queries,
@@ -182,7 +182,7 @@ def test_build_grade_query_result_creates_snapshot_and_state_from_empty_history(
         ),
     )
     assert result.state == RuntimeState(
-        schema_version=4,
+        schema_version=5,
         session_cookies={},
         session_updated_at=None,
         grade_queries={
@@ -348,7 +348,7 @@ def test_run_grade_query_saves_state_after_successful_query(tmp_path) -> None:
         ),
     )
     state_payload = json.loads((tmp_path / "state.json").read_text(encoding="utf-8"))
-    assert state_payload["schema_version"] == 4
+    assert state_payload["schema_version"] == 5
     assert state_payload["session_cookies"] == {"JSESSIONID": "existing"}
     assert state_payload["grade_queries"]["2024-12"]["snapshot"] == [
         {"course_code": "A001", "course_name": "高等数学", "score": "95"}

@@ -73,7 +73,7 @@ def _state(
             )
         }
     return RuntimeState(
-        schema_version=4,
+        schema_version=5,
         session_cookies={} if session_cookies is None else session_cookies,
         session_updated_at=None,
         grade_queries={},
@@ -159,7 +159,7 @@ def test_run_exam_query_saves_state_after_successful_query(tmp_path: Path) -> No
         ),
     )
     state_payload = json.loads((tmp_path / "state.json").read_text(encoding="utf-8"))
-    assert state_payload["schema_version"] == 4
+    assert state_payload["schema_version"] == 5
     assert state_payload["session_cookies"] == {"JSESSIONID": "existing"}
 
 
@@ -167,7 +167,7 @@ def test_run_exam_query_keeps_semester_histories_isolated(tmp_path: Path) -> Non
     spring = _scope("2025", "3")
     autumn = _scope("2025", "12")
     previous_state = RuntimeState(
-        schema_version=4,
+        schema_version=5,
         session_cookies={},
         session_updated_at=None,
         grade_queries={},
