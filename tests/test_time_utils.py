@@ -1,10 +1,16 @@
 """Shared timestamp helper tests."""
 
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 
 import pytest
 
-from cumt_jwxt_cli.time_utils import normalize_optional_iso_timestamp, utc_now_iso
+from cumt_jwxt_cli.time_utils import (
+    AUTUMN_SEMESTER,
+    SPRING_SEMESTER,
+    normalize_optional_iso_timestamp,
+    resolve_query_scope,
+    utc_now_iso,
+)
 
 
 def _runtime_error(message: str) -> Exception:
@@ -55,3 +61,29 @@ def test_utc_now_iso_returns_utc_timestamp() -> None:
 
     assert parsed.tzinfo is not None
     assert parsed.utcoffset() == timedelta(0)
+
+
+@pytest.mark.parametrize(
+    ("moment", "expected"),
+    [
+        (datetime(2026, 9, 1, 0, 0), ("2026", AUTUMN_SEMESTER)),
+        (datetime(2026, 12, 31, 23, 30), ("2026", AUTUMN_SEMESTER)),
+        (datetime(2027, 1, 1, 0, 30), ("2026", AUTUMN_SEMESTER)),
+        (datetime(2027, 1, 31, 23, 59), ("2026", AUTUMN_SEMESTER)),
+        (datetime(2027, 2, 1, 0, 0), ("2026", SPRING_SEMESTER)),
+        (datetime(2027, 7, 31, 23, 59), ("2026", SPRING_SEMESTER)),
+        (datetime(2027, 8, 31, 23, 59), ("2026", SPRING_SEMESTER)),
+    ],
+)
+def test_resolve_query_scope_follows_china_calendar_boundaries(
+    moment: datetime,
+    expected: tuple[str, str],
+) -> None:
+    assert resolve_query_scope(moment) == expected
+
+
+def test_resolve_query_scope_converts_aware_time_to_china() -> None:
+    # 2026-08-31T17:00Z is already 2026-09-01 in Beijing, so it is the new autumn.
+    utc_moment = datetime(2026, 8, 31, 17, 0, tzinfo=UTC)
+
+    assert resolve_query_scope(utc_moment) == ("2026", AUTUMN_SEMESTER)

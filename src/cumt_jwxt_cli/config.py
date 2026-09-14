@@ -21,6 +21,7 @@ from cumt_jwxt_cli.models import (
     OutputConfig,
     QueryConfig,
 )
+from cumt_jwxt_cli.time_utils import resolve_query_scope
 
 _ENV_PREFIX = "CUMT_JWXT_"
 _DEFAULT_CONFIG_NAMES = ("config.local.json", "config.json")
@@ -28,6 +29,7 @@ _PATH_CUMT_USERNAME = ("cumt", "username")
 _PATH_CUMT_PASSWORD = ("cumt", "password")
 _PATH_QUERY_YEAR = ("query", "year")
 _PATH_QUERY_SEMESTER = ("query", "semester")
+_PATH_QUERY_AUTO = ("query", "auto")
 _PATH_CAPTCHA_MANUAL_TIMEOUT = ("captcha", "manual_timeout_seconds")
 _PATH_NOTIFY_ENABLED = ("notify", "enabled")
 _PATH_NOTIFY_SMTP_HOST = ("notify", "smtp_host")
@@ -143,8 +145,14 @@ def _complete_interactive_config(
     raw_config: dict[str, Any],
 ) -> dict[str, Any]:
     completed = json.loads(json.dumps(raw_config))
+    auto_scope = _get_bool(completed, _PATH_QUERY_AUTO, default=False)
+    prompt_fields = tuple(
+        path
+        for path in _PROMPT_FIELDS
+        if not (auto_scope and path in (_PATH_QUERY_YEAR, _PATH_QUERY_SEMESTER))
+    )
     changed = False
-    for path in _PROMPT_FIELDS:
+    for path in prompt_fields:
         if _get_nested(completed, path):
             continue
         env_name = _env_name_for_path(path)
@@ -215,18 +223,35 @@ def _build_cumt_config(raw_config: dict[str, Any]) -> CUMTConfig:
 
 
 def _build_query_config(raw_config: dict[str, Any], args: Namespace) -> QueryConfig:
-    return QueryConfig(
-        year=(
-            str(args.year)
-            if args.year is not None
-            else _get_string(raw_config, _PATH_QUERY_YEAR, required=True)
-        ),
-        semester=(
-            str(args.semester)
-            if args.semester is not None
-            else _get_string(raw_config, _PATH_QUERY_SEMESTER, required=True)
-        ),
+    """Resolve the query scope as CLI override, configured value, or auto default.
+
+    `query.auto` only fills in a scope that is entirely absent; per-field explicit
+    values always win so a fixed term can be pinned without disabling auto.
+    """
+
+    auto = _get_bool(raw_config, _PATH_QUERY_AUTO, default=False)
+    cli_year = getattr(args, "year", None)
+    cli_semester = getattr(args, "semester", None)
+
+    year = (
+        str(cli_year)
+        if cli_year is not None
+        else _get_string(raw_config, _PATH_QUERY_YEAR, default="")
     )
+    semester = (
+        str(cli_semester)
+        if cli_semester is not None
+        else _get_string(raw_config, _PATH_QUERY_SEMESTER, default="")
+    )
+
+    if not year and not semester and auto:
+        year, semester = resolve_query_scope()
+
+    if not year:
+        raise ConfigError("Missing required configuration: query.year")
+    if not semester:
+        raise ConfigError("Missing required configuration: query.semester")
+    return QueryConfig(year=year, semester=semester)
 
 
 def _build_http_config(raw_config: dict[str, Any]) -> HTTPConfig:

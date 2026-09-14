@@ -215,3 +215,136 @@ def test_resolve_config_path_prefers_local_config_in_current_directory(
     monkeypatch.chdir(tmp_path)
 
     assert resolve_config_path(None) == config_path.resolve()
+
+
+def test_load_app_config_auto_derives_scope_when_absent(
+    tmp_path,
+    monkeypatch,
+) -> None:
+    config_path = tmp_path / "config.local.json"
+    _write_config(
+        config_path,
+        {
+            "cumt": {"username": "student", "password": "secret"},
+            "query": {"auto": True},
+        },
+    )
+    monkeypatch.setattr(
+        "cumt_jwxt_cli.config.resolve_query_scope", lambda: ("2026", "3")
+    )
+
+    config = load_app_config(_query_args(config=str(config_path)))
+
+    assert config.query.year == "2026"
+    assert config.query.semester == "3"
+
+
+def test_load_app_config_explicit_scope_wins_over_auto(
+    tmp_path,
+    monkeypatch,
+) -> None:
+    config_path = tmp_path / "config.local.json"
+    _write_config(
+        config_path,
+        {
+            "cumt": {"username": "student", "password": "secret"},
+            "query": {"auto": True, "year": "2024", "semester": "12"},
+        },
+    )
+
+    def fail_resolve() -> tuple[str, str]:
+        raise AssertionError("auto derivation must not run when a scope is set")
+
+    monkeypatch.setattr("cumt_jwxt_cli.config.resolve_query_scope", fail_resolve)
+
+    config = load_app_config(_query_args(config=str(config_path)))
+
+    assert config.query.year == "2024"
+    assert config.query.semester == "12"
+
+
+def test_load_app_config_cli_overrides_auto_derivation(
+    tmp_path,
+    monkeypatch,
+) -> None:
+    config_path = tmp_path / "config.local.json"
+    _write_config(
+        config_path,
+        {
+            "cumt": {"username": "student", "password": "secret"},
+            "query": {"auto": True},
+        },
+    )
+
+    def fail_resolve() -> tuple[str, str]:
+        raise AssertionError("auto derivation must not run when CLI values are given")
+
+    monkeypatch.setattr("cumt_jwxt_cli.config.resolve_query_scope", fail_resolve)
+
+    config = load_app_config(
+        _query_args(config=str(config_path), year="2025", semester="3")
+    )
+
+    assert config.query.year == "2025"
+    assert config.query.semester == "3"
+
+
+def test_load_app_config_missing_scope_without_auto_fails(tmp_path) -> None:
+    config_path = tmp_path / "config.local.json"
+    _write_config(
+        config_path,
+        {"cumt": {"username": "student", "password": "secret"}, "query": {}},
+    )
+
+    with pytest.raises(ConfigError, match="query.year"):
+        load_app_config(_query_args(config=str(config_path)))
+
+
+def test_load_app_config_partial_scope_with_auto_fails(tmp_path) -> None:
+    config_path = tmp_path / "config.local.json"
+    _write_config(
+        config_path,
+        {
+            "cumt": {"username": "student", "password": "secret"},
+            "query": {"auto": True, "year": "2024"},
+        },
+    )
+
+    with pytest.raises(ConfigError, match="query.semester"):
+        load_app_config(_query_args(config=str(config_path)))
+
+
+def test_load_app_config_rejects_non_boolean_auto(tmp_path) -> None:
+    config_path = tmp_path / "config.local.json"
+    _write_config(
+        config_path,
+        {
+            "cumt": {"username": "student", "password": "secret"},
+            "query": {"auto": "yes"},
+        },
+    )
+
+    with pytest.raises(ConfigError, match="query.auto"):
+        load_app_config(_query_args(config=str(config_path)))
+
+
+def test_load_app_config_interactive_skips_scope_prompts_with_auto(
+    tmp_path,
+    monkeypatch,
+) -> None:
+    config_path = tmp_path / "config.local.json"
+    _write_config(config_path, {"query": {"auto": True}})
+    answers = iter(["student", "secret"])
+
+    monkeypatch.setattr("sys.stdin.isatty", lambda: True)
+    monkeypatch.setattr("builtins.input", lambda prompt: next(answers))
+    monkeypatch.setattr(
+        "cumt_jwxt_cli.config.resolve_query_scope", lambda: ("2026", "3")
+    )
+
+    config = load_app_config(_query_args(config=str(config_path), no_interactive=False))
+
+    assert config.cumt.username == "student"
+    assert config.cumt.password == "secret"
+    assert config.query.year == "2026"
+    assert config.query.semester == "3"

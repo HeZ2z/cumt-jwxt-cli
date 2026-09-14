@@ -121,6 +121,27 @@ uv run cumt-jwxt schedule query --config ./config.local.json --no-interactive
 
 敏感字段可以通过环境变量提供，完整配置说明见 wiki。
 
+## 查询学期（query）
+
+`query.year` 是学年起始年（如 `2025` 表示 2025-2026 学年），`query.semester` 是学期代码（`3` 为秋季/第一学期，`12` 为春季/第二学期）。取值优先级从高到低：
+
+1. `--year` / `--semester`
+2. 配置文件中的 `query.year` / `query.semester`
+3. `query.auto` 为 `true` 时按当前系统时间（北京时间）推导
+4. 仍无法确定时报错
+
+开启自动推导后可以省略 `year`、`semester`（或设为 `null`）：
+
+```json
+{
+  "query": {
+    "auto": true
+  }
+}
+```
+
+推导规则：9 月至次年 1 月为秋季学期，2 至 8 月为春季学期，1 月仍归属上一学年的秋季学期。这是按日历的近似值，开学与期末日期逐年浮动；跨学期边界运行定时任务时建议显式传 `--year` / `--semester`，避免学年学期切换被变更检测当成一次全量变更。
+
 ## 输出文件命名
 
 启用可选输出后，产物文件名会带学年学期后缀，便于多学期并存：
