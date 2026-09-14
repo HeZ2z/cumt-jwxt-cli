@@ -60,6 +60,7 @@ uv run ruff check .
 - `src/cumt_jwxt_cli/client/`: 登录、会话和教务系统 HTTP 交互。
 - `src/cumt_jwxt_cli/captcha/`: 验证码识别或人工输入。
 - `src/cumt_jwxt_cli/grades/`: 成绩查询、解析、比较、快照和报告。
+- `src/cumt_jwxt_cli/schedule/`: 个人课表查询、解析、快照和报告。
 - `src/cumt_jwxt_cli/notify/`: 邮件通知。
 - `tests/`: pytest 测试。
 

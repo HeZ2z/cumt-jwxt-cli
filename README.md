@@ -15,6 +15,7 @@
 ```bash
 cumt-jwxt grades query
 cumt-jwxt exams query
+cumt-jwxt schedule query
 ```
 
 ## 报告示例
@@ -32,7 +33,9 @@ cumt-jwxt exams query
 - 解析成绩列表、检测新增/更新/删除，并生成文本摘要。
 - 按需查询成绩详情，生成 HTML 邮件或本地报告。
 - 查询考试安排并生成文本摘要。
+- 查询个人课表，检测课程新增/变更，并生成文本摘要。
 - 可选保存成绩/考试 JSON、HTML 报告，以及考试 ICS 日历文件。
+- 可选保存课表 JSON、HTML 报告，以及个人课表 ICS 日历文件。
 - 在检测到成绩变化或显式强制时发送 SMTP 邮件。
 
 ## 安装
@@ -84,6 +87,7 @@ cp config.example.json config.local.json
 ```bash
 uv run cumt-jwxt grades query
 uv run cumt-jwxt exams query
+uv run cumt-jwxt schedule query
 ```
 
 适合定时任务的非交互命令：
@@ -91,6 +95,7 @@ uv run cumt-jwxt exams query
 ```bash
 uv run cumt-jwxt grades query --config ./config.local.json --no-interactive
 uv run cumt-jwxt exams query --config ./config.local.json --no-interactive
+uv run cumt-jwxt schedule query --config ./config.local.json --no-interactive
 ```
 
 ## 最小配置示例
@@ -125,8 +130,11 @@ uv run cumt-jwxt exams query --config ./config.local.json --no-interactive
 - 考试 JSON：`exams_<yy><sp|fa>.json`
 - 考试 HTML：`exam_report_<yy><sp|fa>.html`
 - 考试 ICS：`exam_schedule_<yy><sp|fa>.ics`
+- 课表 JSON：`schedules_<yy><sp|fa>.json`
+- 课表 HTML：`schedule_report_<yy><sp|fa>.html`
+- 课表 ICS：`schedule_<yy><sp|fa>.ics`
 
-其中 `sp` 表示春季学期，`fa` 表示秋季学期。例如 `grades_26sp.json`、`exam_schedule_25fa.ics`。
+其中 `sp` 表示春季学期，`fa` 表示秋季学期。例如 `grades_26sp.json`、`exam_schedule_25fa.ics`、`schedule_25fa.ics`。
 
 ## 文档
 
@@ -159,6 +167,7 @@ uv run ruff check .
 - `src/cumt_jwxt_cli/captcha/`：验证码识别
 - `src/cumt_jwxt_cli/grades/`：成绩查询、解析、快照、报告
 - `src/cumt_jwxt_cli/exams/`：考试安排查询、解析、报告
+- `src/cumt_jwxt_cli/schedule/`：个人课表查询、解析、报告
 - `src/cumt_jwxt_cli/notify/`：邮件通知
 - `tests/`：pytest 测试
 
