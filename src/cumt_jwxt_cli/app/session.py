@@ -5,6 +5,8 @@ from __future__ import annotations
 from collections.abc import Callable
 from typing import TypeVar
 
+from cumt_jwxt_cli.academic.query_fetch import is_academic_session_query_failure
+from cumt_jwxt_cli.academic.service import run_academic_query
 from cumt_jwxt_cli.captcha.ddddocr_ocr import recognize_captcha
 from cumt_jwxt_cli.classrooms.query_fetch import (
     ClassroomQueryOptions,
@@ -19,6 +21,7 @@ from cumt_jwxt_cli.exams.query_fetch import is_exam_session_query_failure
 from cumt_jwxt_cli.exams.service import run_exam_query
 from cumt_jwxt_cli.grades.service import is_session_query_failure, run_grade_query
 from cumt_jwxt_cli.models import (
+    AcademicSummaryResult,
     AppConfig,
     ExamQueryResult,
     GradeQueryResult,
@@ -149,6 +152,34 @@ def query_classrooms_with_session_reuse(
         config,
         action=action,
         is_session_failure=is_classroom_session_query_failure,
+        trust_env=trust_env,
+        allow_manual_captcha=allow_manual_captcha,
+    )
+
+
+def query_academic_with_session_reuse(
+    config: AppConfig,
+    *,
+    trust_env: bool,
+    allow_manual_captcha: bool = True,
+) -> AcademicSummaryResult:
+    """Reuse saved session cookies and retry once after session expiry.
+
+    Academic status is read-only and cumulative, so this never writes state or
+    triggers notifications.
+    """
+
+    def action(
+        client: object,
+        _previous_state: RuntimeState,
+        _session_updated_at: str | None,
+    ) -> AcademicSummaryResult:
+        return run_academic_query(config, client)
+
+    return _with_session(
+        config,
+        action=action,
+        is_session_failure=is_academic_session_query_failure,
         trust_env=trust_env,
         allow_manual_captcha=allow_manual_captcha,
     )

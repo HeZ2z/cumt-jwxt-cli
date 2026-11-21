@@ -4,7 +4,9 @@ import argparse
 import sys
 from collections.abc import Sequence
 
+from cumt_jwxt_cli.academic.report import build_academic_text_summary
 from cumt_jwxt_cli.app import (
+    query_academic_with_session_reuse,
     query_classrooms_with_session_reuse,
     query_exams_with_session_reuse,
     query_grades_with_session_reuse,
@@ -93,6 +95,7 @@ def _add_query_arguments(
     save_ics: bool = False,
     include_force_email: bool = True,
     include_output: bool = True,
+    include_scope: bool = True,
 ) -> None:
     """Add the flags shared by every query subcommand."""
 
@@ -103,10 +106,11 @@ def _add_query_arguments(
             "config.local.json 或 config.json。"
         ),
     )
-    parser.add_argument("--year", help="学年起始年，例如 2025。优先于 query.auto。")
-    parser.add_argument(
-        "--semester", help="学期代码：3 为秋季，12 为春季。优先于 query.auto。"
-    )
+    if include_scope:
+        parser.add_argument("--year", help="学年起始年，例如 2025。优先于 query.auto。")
+        parser.add_argument(
+            "--semester", help="学期代码：3 为秋季，12 为春季。优先于 query.auto。"
+        )
     if include_force_email:
         parser.add_argument(
             "--force-email",
@@ -272,6 +276,27 @@ def build_parser() -> argparse.ArgumentParser:
     _add_classroom_arguments(classrooms_query_parser)
     classrooms_query_parser.set_defaults(
         handler=_handle_classrooms_query, parser=classrooms_query_parser
+    )
+
+    academic_parser = _add_subparser(subparsers, "academic", help="查询学业情况。")
+    academic_parser.set_defaults(handler=_print_help, parser=academic_parser)
+    academic_subparsers = academic_parser.add_subparsers(dest="academic_command")
+
+    academic_query_parser = _add_subparser(
+        academic_subparsers,
+        "query",
+        help="查询 CUMT 教务系统学业情况。",
+        description="查询 CUMT 教务系统学业情况。",
+    )
+    _add_query_arguments(
+        academic_query_parser,
+        target="学业情况",
+        include_force_email=False,
+        include_output=False,
+        include_scope=False,
+    )
+    academic_query_parser.set_defaults(
+        handler=_handle_academic_query, parser=academic_query_parser
     )
 
     return parser
@@ -458,6 +483,27 @@ def _handle_classrooms_query(args: argparse.Namespace) -> int:
             campus=args.campus,
         )
     )
+    return int(ExitCode.OK)
+
+
+def _handle_academic_query(args: argparse.Namespace) -> int:
+    try:
+        config = load_app_config(args)
+        configure_logging(
+            config_path=config.config_path,
+            retention_days=config.logging.retention_days,
+            verbose=args.verbose,
+        )
+        result = query_academic_with_session_reuse(
+            config,
+            trust_env=not args.no_proxy,
+            allow_manual_captcha=not args.no_interactive,
+        )
+    except CUMTJWXTError as exc:
+        print(str(exc), file=sys.stderr)
+        return int(_exit_code_for(exc))
+
+    print(build_academic_text_summary(result))
     return int(ExitCode.OK)
 
 
