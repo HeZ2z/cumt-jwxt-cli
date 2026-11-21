@@ -26,6 +26,7 @@ def query_grades_with_session_reuse(
     *,
     force_email: bool,
     trust_env: bool,
+    allow_manual_captcha: bool = True,
 ) -> GradeQueryResult:
     """Load state, reuse session cookies, and retry once after session expiry."""
 
@@ -41,7 +42,7 @@ def query_grades_with_session_reuse(
 
         session_updated_at = None
         if not previous_state.session_cookies:
-            _login(config, client)
+            _login(config, client, allow_manual_captcha=allow_manual_captcha)
             session_updated_at = _now_iso()
 
         try:
@@ -58,7 +59,7 @@ def query_grades_with_session_reuse(
                 raise
 
             client.reset_session()
-            _login(config, client)
+            _login(config, client, allow_manual_captcha=allow_manual_captcha)
             return run_grade_query(
                 config,
                 client,
@@ -69,14 +70,35 @@ def query_grades_with_session_reuse(
             )
 
 
-def _login(config: AppConfig, client: JWXTClient) -> None:
-    login(config, client, recognize_captcha=_recognize_captcha_with_config)
+def _login(
+    config: AppConfig,
+    client: JWXTClient,
+    *,
+    allow_manual_captcha: bool = True,
+) -> None:
+    # auth.login() calls the callback as (image, config); accepting config here
+    # keeps the closure signature in sync with that contract.
+    def recognize(image: bytes, _config: AppConfig) -> str:
+        return _recognize_captcha_with_config(
+            image,
+            config,
+            allow_manual_captcha=allow_manual_captcha,
+        )
+
+    login(config, client, recognize_captcha=recognize)
 
 
-def _recognize_captcha_with_config(image: bytes, config: AppConfig) -> str:
+def _recognize_captcha_with_config(
+    image: bytes,
+    config: AppConfig,
+    *,
+    allow_manual_captcha: bool = True,
+) -> str:
     return recognize_captcha(
         image,
-        manual_timeout_seconds=config.captcha.manual_timeout_seconds,
+        manual_timeout_seconds=(
+            config.captcha.manual_timeout_seconds if allow_manual_captcha else None
+        ),
     )
 
 
@@ -89,6 +111,7 @@ def query_exams_with_session_reuse(
     *,
     force_email: bool,
     trust_env: bool,
+    allow_manual_captcha: bool = True,
 ) -> ExamQueryResult:
     """Load state, reuse session cookies, and retry once after session expiry."""
 
@@ -104,7 +127,7 @@ def query_exams_with_session_reuse(
 
         session_updated_at = None
         if not previous_state.session_cookies:
-            _login(config, client)
+            _login(config, client, allow_manual_captcha=allow_manual_captcha)
             session_updated_at = _now_iso()
 
         try:
@@ -123,7 +146,7 @@ def query_exams_with_session_reuse(
                 raise
 
             client.reset_session()
-            _login(config, client)
+            _login(config, client, allow_manual_captcha=allow_manual_captcha)
             return run_exam_query(
                 config,
                 client,
@@ -139,6 +162,7 @@ def query_schedule_with_session_reuse(
     *,
     force_email: bool,
     trust_env: bool,
+    allow_manual_captcha: bool = True,
 ) -> ScheduleQueryResult:
     """Load state, reuse session cookies, and retry once after session expiry."""
 
@@ -154,7 +178,7 @@ def query_schedule_with_session_reuse(
 
         session_updated_at = None
         if not previous_state.session_cookies:
-            _login(config, client)
+            _login(config, client, allow_manual_captcha=allow_manual_captcha)
             session_updated_at = _now_iso()
 
         try:
@@ -174,7 +198,7 @@ def query_schedule_with_session_reuse(
                 raise
 
             client.reset_session()
-            _login(config, client)
+            _login(config, client, allow_manual_captcha=allow_manual_captcha)
             return run_schedule_query(
                 config,
                 client,

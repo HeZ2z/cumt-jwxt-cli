@@ -8,7 +8,7 @@ from typing import Any
 
 import httpx
 
-from cumt_jwxt_cli.errors import QueryError
+from cumt_jwxt_cli.errors import QueryError, SessionExpiredError
 
 BASE_URL = "http://jwxt.cumt.edu.cn/jwglxt"
 USER_AGENT = "cumt-jwxt-cli/0.1"
@@ -114,6 +114,8 @@ class JWXTClient:
         for attempt_index in range(attempts):
             try:
                 response = self._client.request(method, path, **kwargs)
+                if response.status_code == 901:
+                    raise SessionExpiredError("JWXT request failed with HTTP 901.")
                 if response.status_code >= 400:
                     response.raise_for_status()
                 return response
@@ -131,3 +133,28 @@ class JWXTClient:
                 time.sleep(self._retry_backoff_seconds * (attempt_index + 1))
 
         raise QueryError("JWXT request failed after retry attempts.") from last_error
+
+
+def ensure_authenticated_response(response: object, label: str) -> None:
+    """Raise ``SessionExpiredError`` when a response indicates a dead session.
+
+    Uses defensive ``getattr`` access so lightweight test doubles and legacy
+    response objects without full httpx attributes still work.
+    """
+
+    content_type = ""
+    headers = getattr(response, "headers", None)
+    if hasattr(headers, "get"):
+        content_type = str(headers.get("content-type", "")).lower()
+    status_code = getattr(response, "status_code", None)
+    # JWXT returns HTTP 901 when the login session has expired.
+    if status_code == 901:
+        raise SessionExpiredError(f"JWXT {label} request failed with HTTP 901.")
+    if status_code in {301, 302, 303, 307, 308}:
+        raise SessionExpiredError(
+            f"JWXT {label} request was redirected with HTTP {status_code}."
+        )
+    if "text/html" in content_type:
+        raise SessionExpiredError(
+            f"JWXT {label} response looks like an HTML login page."
+        )

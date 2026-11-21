@@ -309,6 +309,7 @@ def _handle_grades_query(args: argparse.Namespace) -> int:
             config,
             force_email=args.force_email,
             trust_env=not args.no_proxy,
+            allow_manual_captcha=not args.no_interactive,
         )
     except ConfigError as exc:
         print(str(exc), file=sys.stderr)
@@ -358,6 +359,7 @@ def _handle_exams_query(args: argparse.Namespace) -> int:
             config,
             force_email=args.force_email,
             trust_env=not args.no_proxy,
+            allow_manual_captcha=not args.no_interactive,
         )
     except ConfigError as exc:
         print(str(exc), file=sys.stderr)
@@ -407,6 +409,7 @@ def _handle_schedule_query(args: argparse.Namespace) -> int:
             config,
             force_email=args.force_email,
             trust_env=not args.no_proxy,
+            allow_manual_captcha=not args.no_interactive,
         )
     except ConfigError as exc:
         print(str(exc), file=sys.stderr)

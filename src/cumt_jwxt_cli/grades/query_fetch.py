@@ -7,7 +7,8 @@ import time
 from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
 
-from cumt_jwxt_cli.errors import ParseError, QueryError
+from cumt_jwxt_cli.client.paging import fetch_all_items
+from cumt_jwxt_cli.errors import ParseError, QueryError, SessionExpiredError
 from cumt_jwxt_cli.grades.parser import parse_grade_detail, parse_grade_list
 from cumt_jwxt_cli.models import AppConfig, CourseGrade, GradeDetail, GradeQueryResult
 
@@ -19,40 +20,22 @@ _LOGGER = logging.getLogger(__name__)
 def query_grade_list(config: AppConfig, client: object) -> list[CourseGrade]:
     """Fetch and parse the JWXT grade list response."""
 
-    try:
-        response = client.post(
-            GRADE_LIST_PATH,
-            data={
-                "xnm": config.query.year,
-                "xqm": config.query.semester,
-                "sfzgcj": "",
-                "kcbj": "",
-                "_search": "false",
-                "queryModel.showCount": "100",
-                "queryModel.currentPage": "1",
-                "queryModel.sortName": "",
-                "queryModel.sortOrder": "asc",
-                "time": "13",
-            },
-        )
-        content_type = ""
-        headers = getattr(response, "headers", None)
-        if hasattr(headers, "get"):
-            content_type = str(headers.get("content-type", "")).lower()
-        status_code = getattr(response, "status_code", None)
-        if status_code == 901:
-            raise QueryError("JWXT grade list request failed with HTTP 901.")
-        if status_code in {301, 302, 303, 307, 308}:
-            raise QueryError(
-                f"JWXT grade list request was redirected with HTTP {status_code}."
-            )
-        if "text/html" in content_type:
-            raise QueryError("JWXT grade list response looks like an HTML login page.")
-        return parse_grade_list(response.json())
-    except ValueError as exc:
-        raise QueryError("JWXT grade list response is not valid JSON.") from exc
-    except AttributeError as exc:
-        raise QueryError("JWXT client returned an invalid response object.") from exc
+    items = fetch_all_items(
+        client,
+        GRADE_LIST_PATH,
+        data={
+            "xnm": config.query.year,
+            "xqm": config.query.semester,
+            "sfzgcj": "",
+            "kcbj": "",
+            "_search": "false",
+            "queryModel.sortName": "",
+            "queryModel.sortOrder": "asc",
+            "time": "13",
+        },
+        label="grade list",
+    )
+    return parse_grade_list({"items": items})
 
 
 def query_grade_details_if_needed(
@@ -126,10 +109,4 @@ def query_grade_detail(
 def is_session_query_failure(exc: QueryError) -> bool:
     """Return whether a query failure likely indicates an expired login session."""
 
-    message = str(exc).lower()
-    session_markers = (
-        "http 901",
-        "redirected with http 30",
-        "html login page",
-    )
-    return any(marker in message for marker in session_markers)
+    return isinstance(exc, SessionExpiredError)
