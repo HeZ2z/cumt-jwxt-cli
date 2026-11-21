@@ -323,7 +323,7 @@ def _resolve_scope_config(
         )
     else:
         year, semester = term
-        logger.info("Resolved current JWXT term: %s/%s.", year, semester)
+        logger.debug("Resolved current JWXT term: %s/%s.", year, semester)
     return _config_with_scope(config, year, semester)
 
 
