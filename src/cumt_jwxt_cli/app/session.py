@@ -10,6 +10,11 @@ from typing import TypeVar
 from cumt_jwxt_cli.academic.query_fetch import is_academic_session_query_failure
 from cumt_jwxt_cli.academic.service import run_academic_query
 from cumt_jwxt_cli.captcha.ddddocr_ocr import recognize_captcha
+from cumt_jwxt_cli.class_schedule.query_fetch import (
+    ClassScheduleFilters,
+    is_class_schedule_session_query_failure,
+)
+from cumt_jwxt_cli.class_schedule.service import run_class_schedule_query
 from cumt_jwxt_cli.classrooms.query_fetch import (
     ClassroomQueryOptions,
     ClassroomQueryResult,
@@ -32,6 +37,7 @@ from cumt_jwxt_cli.grades.service import is_session_query_failure, run_grade_que
 from cumt_jwxt_cli.models import (
     AcademicSummaryResult,
     AppConfig,
+    ClassScheduleResult,
     ExamQueryResult,
     GradeQueryResult,
     QueryConfig,
@@ -170,6 +176,37 @@ def query_classrooms_with_session_reuse(
         config,
         action=action,
         is_session_failure=is_classroom_session_query_failure,
+        trust_env=trust_env,
+        allow_manual_captcha=allow_manual_captcha,
+        resolve_scope=True,
+    )
+
+
+def query_class_schedule_with_session_reuse(
+    config: AppConfig,
+    *,
+    filters: ClassScheduleFilters,
+    trust_env: bool,
+    allow_manual_captcha: bool = True,
+) -> ClassScheduleResult:
+    """Load state, reuse session cookies, and retry once after session expiry.
+
+    Class timetable queries are read-only and never write state or send
+    notifications.
+    """
+
+    def action(
+        config: AppConfig,
+        client: object,
+        _previous_state: RuntimeState,
+        _session_updated_at: str | None,
+    ) -> ClassScheduleResult:
+        return run_class_schedule_query(config, client, filters)
+
+    return _with_session(
+        config,
+        action=action,
+        is_session_failure=is_class_schedule_session_query_failure,
         trust_env=trust_env,
         allow_manual_captcha=allow_manual_captcha,
         resolve_scope=True,
