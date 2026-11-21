@@ -1027,3 +1027,128 @@ def test_manual_captcha_timeout_follows_allow_flag(
     assert len(recognize_callbacks) == 1
     assert recognize_callbacks[0](b"image", _config()) == "1234"
     assert timeout_values == [expected_timeout]
+
+
+def test_query_classrooms_with_session_reuse_reuses_saved_cookies(
+    monkeypatch,
+) -> None:
+    previous_state = _runtime_state(
+        session_cookies={"JSESSIONID": "saved"},
+        session_updated_at="2026-05-08T12:00:00+08:00",
+    )
+    login_calls = 0
+    run_calls: list[object] = []
+    options = SimpleNamespace(date="2026-11-23", limit=5)
+
+    class FakeClient:
+        def __init__(self, **kwargs: object) -> None:
+            self.kwargs = kwargs
+
+        def __enter__(self) -> "FakeClient":
+            return self
+
+        def __exit__(self, *args: object) -> None:
+            return None
+
+        def load_cookies(self, cookies: dict[str, str] | None) -> None:
+            assert cookies == {"JSESSIONID": "saved"}
+
+        def check_reachable(self) -> None:
+            return None
+
+        def export_cookies(self) -> dict[str, str]:
+            return {"JSESSIONID": "saved"}
+
+        def reset_session(self) -> None:
+            raise AssertionError("reset_session should not be needed")
+
+    monkeypatch.setattr(app_module, "load_runtime_state", lambda _cfg: previous_state)
+    monkeypatch.setattr(app_module, "JWXTClient", FakeClient)
+
+    def fake_login(_cfg, _client, **_kwargs) -> None:
+        nonlocal login_calls
+        login_calls += 1
+
+    def fake_run_classroom_query(*args: object, **kwargs: object) -> object:
+        run_calls.append((args, kwargs))
+        return SimpleNamespace(classrooms=(), total=0)
+
+    monkeypatch.setattr(app_module, "_login", fake_login)
+    monkeypatch.setattr(app_module, "run_classroom_query", fake_run_classroom_query)
+
+    result = app_module.query_classrooms_with_session_reuse(
+        _config(),
+        options=options,
+        trust_env=False,
+    )
+
+    assert result is not None
+    assert login_calls == 0
+    assert len(run_calls) == 1
+
+
+def test_query_classrooms_with_session_reuse_retries_once_after_expiry(
+    monkeypatch,
+) -> None:
+    previous_state = _runtime_state(
+        session_cookies={"JSESSIONID": "saved"},
+        session_updated_at="2026-05-08T12:00:00+08:00",
+    )
+    login_calls = 0
+    reset_calls = 0
+    run_calls = 0
+    options = SimpleNamespace(date="2026-11-23", limit=5)
+
+    class FakeClient:
+        def __init__(self, **kwargs: object) -> None:
+            self.kwargs = kwargs
+
+        def __enter__(self) -> "FakeClient":
+            return self
+
+        def __exit__(self, *args: object) -> None:
+            return None
+
+        def load_cookies(self, cookies: dict[str, str] | None) -> None:
+            assert cookies == {"JSESSIONID": "saved"}
+
+        def check_reachable(self) -> None:
+            return None
+
+        def export_cookies(self) -> dict[str, str]:
+            return {"JSESSIONID": "renewed"}
+
+        def reset_session(self) -> None:
+            nonlocal reset_calls
+            reset_calls += 1
+
+    monkeypatch.setattr(app_module, "load_runtime_state", lambda _cfg: previous_state)
+    monkeypatch.setattr(app_module, "JWXTClient", FakeClient)
+    monkeypatch.setattr(app_module, "_now_iso", lambda: "2026-05-09T10:00:00+00:00")
+
+    def fake_login(_cfg, _client, **_kwargs) -> None:
+        nonlocal login_calls
+        login_calls += 1
+
+    def fake_run_classroom_query(*args: object, **kwargs: object) -> object:
+        nonlocal run_calls
+        run_calls += 1
+        if run_calls == 1:
+            raise SessionExpiredError(
+                "JWXT classroom list request failed with HTTP 901."
+            )
+        return SimpleNamespace(classrooms=(), total=0)
+
+    monkeypatch.setattr(app_module, "_login", fake_login)
+    monkeypatch.setattr(app_module, "run_classroom_query", fake_run_classroom_query)
+
+    result = app_module.query_classrooms_with_session_reuse(
+        _config(),
+        options=options,
+        trust_env=False,
+    )
+
+    assert result is not None
+    assert run_calls == 2
+    assert login_calls == 1
+    assert reset_calls == 1

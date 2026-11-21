@@ -305,6 +305,25 @@ class ExamQueryResult:
 
 
 @dataclass(frozen=True)
+class FreeClassroom:
+    """Parsed free classroom record.
+
+    Fields mirror the JWXT list payload; ``None`` means the field was absent.
+    """
+
+    room_name: str | None
+    room_code: str | None
+    building: str | None
+    floor: str | None
+    campus: str | None
+    category: str | None
+    seats: str | None
+    exam_seats: str | None
+    lendable: bool | None
+    schedulable: bool | None
+
+
+@dataclass(frozen=True)
 class GradeQueryResult:
     """Pure business result for a completed grade query workflow."""
 

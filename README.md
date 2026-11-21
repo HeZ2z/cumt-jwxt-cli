@@ -16,6 +16,7 @@
 cumt-jwxt grades query
 cumt-jwxt exams query
 cumt-jwxt schedule query
+cumt-jwxt classrooms query --date 2026-11-23
 ```
 
 ## 报告示例
@@ -34,6 +35,7 @@ cumt-jwxt schedule query
 - 按需查询成绩详情，生成 HTML 邮件或本地报告。
 - 查询考试安排并生成文本摘要。
 - 查询个人课表，检测课程新增/变更，并生成文本摘要。
+- 按日期和时段查询空闲教室，支持校区、楼号、座位数和可借用筛选。
 - 可选保存成绩/考试 JSON、HTML 报告，以及考试 ICS 日历文件。
 - 可选保存课表 JSON、HTML 报告，以及个人课表 ICS 日历文件。
 - 在检测到成绩变化或显式强制时发送 SMTP 邮件。
@@ -88,6 +90,7 @@ cp config.example.json config.local.json
 uv run cumt-jwxt grades query
 uv run cumt-jwxt exams query
 uv run cumt-jwxt schedule query
+uv run cumt-jwxt classrooms query --date 2026-11-23 --start 08:00 --end 09:40
 ```
 
 适合定时任务的非交互命令：
@@ -96,6 +99,7 @@ uv run cumt-jwxt schedule query
 uv run cumt-jwxt grades query --config ./config.local.json --no-interactive
 uv run cumt-jwxt exams query --config ./config.local.json --no-interactive
 uv run cumt-jwxt schedule query --config ./config.local.json --no-interactive
+uv run cumt-jwxt classrooms query --date 2026-11-23 --config ./config.local.json --no-interactive
 ```
 
 ## 最小配置示例
