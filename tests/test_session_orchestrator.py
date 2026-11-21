@@ -1692,3 +1692,138 @@ def test_query_class_schedule_with_session_reuse_retries_once_after_expiry(
     assert run_calls == 2
     assert login_calls == 1
     assert reset_calls == 1
+
+
+# -- teaching plan --------------------------------------------------------
+
+
+def test_query_plan_with_session_reuse_skips_scope_resolution(monkeypatch) -> None:
+    previous_state = _runtime_state(
+        session_cookies={"JSESSIONID": "saved"},
+        session_updated_at="2026-05-08T12:00:00+08:00",
+    )
+    login_calls = 0
+    run_calls: list[object] = []
+    filters = SimpleNamespace(plan_id="PLAN-1")
+
+    class FakeClient:
+        def __init__(self, **kwargs: object) -> None:
+            self.kwargs = kwargs
+
+        def __enter__(self) -> "FakeClient":
+            return self
+
+        def __exit__(self, *args: object) -> None:
+            return None
+
+        def load_cookies(self, cookies: dict[str, str] | None) -> None:
+            assert cookies == {"JSESSIONID": "saved"}
+
+        def check_reachable(self) -> None:
+            return None
+
+        def export_cookies(self) -> dict[str, str]:
+            raise AssertionError("plan query should not export cookies")
+
+        def reset_session(self) -> None:
+            raise AssertionError("reset_session should not be needed")
+
+    expected = SimpleNamespace(header=None, courses=())
+
+    monkeypatch.setattr(app_module, "load_runtime_state", lambda _cfg: previous_state)
+    monkeypatch.setattr(app_module, "JWXTClient", FakeClient)
+    monkeypatch.setattr(
+        app_module,
+        "resolve_current_term",
+        lambda _client: (_ for _ in ()).throw(
+            AssertionError("term resolution must be skipped for plans")
+        ),
+    )
+
+    def fake_login(_cfg, _client, **_kwargs) -> None:
+        nonlocal login_calls
+        login_calls += 1
+
+    def fake_run_plan_query(config, client, plan_filters):
+        run_calls.append(plan_filters)
+        return expected
+
+    monkeypatch.setattr(app_module, "_login", fake_login)
+    monkeypatch.setattr(app_module, "run_plan_query", fake_run_plan_query)
+
+    result = app_module.query_plan_with_session_reuse(
+        _config(),
+        filters=filters,
+        trust_env=False,
+    )
+
+    assert result is expected
+    assert login_calls == 0
+    assert run_calls == [filters]
+    assert filters.plan_id == "PLAN-1"
+
+
+def test_query_plan_with_session_reuse_retries_once_after_expiry(monkeypatch) -> None:
+    previous_state = _runtime_state(
+        session_cookies={"JSESSIONID": "saved"},
+        session_updated_at="2026-05-08T12:00:00+08:00",
+    )
+    login_calls = 0
+    reset_calls = 0
+    run_calls = 0
+
+    class FakeClient:
+        def __init__(self, **kwargs: object) -> None:
+            self.kwargs = kwargs
+
+        def __enter__(self) -> "FakeClient":
+            return self
+
+        def __exit__(self, *args: object) -> None:
+            return None
+
+        def load_cookies(self, cookies: dict[str, str] | None) -> None:
+            assert cookies == {"JSESSIONID": "saved"}
+
+        def check_reachable(self) -> None:
+            return None
+
+        def export_cookies(self) -> dict[str, str]:
+            raise AssertionError("plan query should not export cookies")
+
+        def reset_session(self) -> None:
+            nonlocal reset_calls
+            reset_calls += 1
+
+    expected = SimpleNamespace(header=None, courses=())
+
+    monkeypatch.setattr(app_module, "load_runtime_state", lambda _cfg: previous_state)
+    monkeypatch.setattr(app_module, "JWXTClient", FakeClient)
+    monkeypatch.setattr(app_module, "_now_iso", lambda: "2026-05-09T10:00:00+00:00")
+
+    def fake_login(_cfg, _client, **_kwargs) -> None:
+        nonlocal login_calls
+        login_calls += 1
+
+    def fake_run_plan_query(config, client, plan_filters):
+        nonlocal run_calls
+        run_calls += 1
+        if run_calls == 1:
+            raise SessionExpiredError(
+                "JWXT teaching plan list request failed with HTTP 901."
+            )
+        return expected
+
+    monkeypatch.setattr(app_module, "_login", fake_login)
+    monkeypatch.setattr(app_module, "run_plan_query", fake_run_plan_query)
+
+    result = app_module.query_plan_with_session_reuse(
+        _config(),
+        filters=SimpleNamespace(plan_id="PLAN-1"),
+        trust_env=False,
+    )
+
+    assert result is expected
+    assert run_calls == 2
+    assert login_calls == 1
+    assert reset_calls == 1

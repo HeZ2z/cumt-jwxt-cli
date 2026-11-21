@@ -19,5 +19,8 @@ from cumt_jwxt_cli.app.session import (
     query_grades_with_session_reuse as query_grades_with_session_reuse,
 )
 from cumt_jwxt_cli.app.session import (
+    query_plan_with_session_reuse as query_plan_with_session_reuse,
+)
+from cumt_jwxt_cli.app.session import (
     query_schedule_with_session_reuse as query_schedule_with_session_reuse,
 )

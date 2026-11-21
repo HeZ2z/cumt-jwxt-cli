@@ -493,3 +493,63 @@ class AcademicSummaryResult:
     overview: AcademicOverview
     plan_nodes: tuple[PlanRequirementNode, ...]
     property_stats: tuple[CoursePropertyStat, ...]
+
+
+@dataclass(frozen=True)
+class TeachingPlanHeader:
+    """One teaching execution plan header.
+
+    Fields mirror the JWXT plan list payload; ``None`` means the field was
+    absent.
+    """
+
+    plan_id: str | None
+    grade: str | None
+    major_code: str | None
+    major_name: str | None
+    college_id: str | None
+    campus: str | None
+    program_length: str | None
+    course_count: str | None
+    total_credits: str | None
+
+
+@dataclass(frozen=True)
+class TeachingPlanCourse:
+    """One course row of a teaching execution plan.
+
+    Fields mirror the JWXT plan course payload; ``None`` means the field was
+    absent.
+    """
+
+    course_code: str | None
+    course_name: str | None
+    course_name_en: str | None
+    credits: str | None
+    total_hours: str | None
+    study_year: str | None
+    study_term: str | None
+    allowed_terms: str | None
+    category_name: str | None
+    class_category: str | None
+    assessment_method: str | None
+    exam_method: str | None
+    department: str | None
+    week_range: str | None
+    study_type: str | None
+    status: str | None
+
+
+@dataclass(frozen=True)
+class TeachingPlanResult:
+    """Pure business result for a completed teaching plan workflow."""
+
+    header: TeachingPlanHeader | None
+    courses: tuple[TeachingPlanCourse, ...] = ()
+    plans: tuple[TeachingPlanHeader, ...] = ()
+    total: int = 0
+    list_only: bool = False
+    course_query: str | None = None
+    study_year: str | None = None
+    study_term: str | None = None
+    study_type: str | None = None

@@ -43,7 +43,13 @@ from cumt_jwxt_cli.models import (
     QueryConfig,
     RuntimeState,
     ScheduleQueryResult,
+    TeachingPlanResult,
 )
+from cumt_jwxt_cli.plan.query_fetch import (
+    PlanFilters,
+    is_plan_session_query_failure,
+)
+from cumt_jwxt_cli.plan.service import run_plan_query
 from cumt_jwxt_cli.schedule.query_fetch import is_schedule_session_query_failure
 from cumt_jwxt_cli.schedule.service import run_schedule_query
 from cumt_jwxt_cli.state import load_runtime_state
@@ -267,6 +273,37 @@ def query_academic_with_session_reuse(
         config,
         action=action,
         is_session_failure=is_academic_session_query_failure,
+        trust_env=trust_env,
+        allow_manual_captcha=allow_manual_captcha,
+        resolve_scope=False,
+    )
+
+
+def query_plan_with_session_reuse(
+    config: AppConfig,
+    *,
+    filters: PlanFilters,
+    trust_env: bool,
+    allow_manual_captcha: bool = True,
+) -> TeachingPlanResult:
+    """Reuse saved session cookies and retry once after session expiry.
+
+    Teaching plans are not tied to an academic term, so scope resolution is
+    skipped. Plan queries are read-only and never write state or send mail.
+    """
+
+    def action(
+        config: AppConfig,
+        client: object,
+        _previous_state: RuntimeState,
+        _session_updated_at: str | None,
+    ) -> TeachingPlanResult:
+        return run_plan_query(config, client, filters)
+
+    return _with_session(
+        config,
+        action=action,
+        is_session_failure=is_plan_session_query_failure,
         trust_env=trust_env,
         allow_manual_captcha=allow_manual_captcha,
         resolve_scope=False,

@@ -13,6 +13,7 @@ from cumt_jwxt_cli.app import (
     query_courses_with_session_reuse,
     query_exams_with_session_reuse,
     query_grades_with_session_reuse,
+    query_plan_with_session_reuse,
     query_schedule_with_session_reuse,
 )
 from cumt_jwxt_cli.class_schedule.query_fetch import ClassScheduleFilters
@@ -55,6 +56,11 @@ from cumt_jwxt_cli.grades.query_state import (
 )
 from cumt_jwxt_cli.grades.report import build_text_summary
 from cumt_jwxt_cli.logging_config import configure_logging
+from cumt_jwxt_cli.plan.query_fetch import PlanFilters
+from cumt_jwxt_cli.plan.report import (
+    build_plan_list_text,
+    build_plan_text_summary,
+)
 from cumt_jwxt_cli.schedule.query_state import (
     get_schedule_query_state,
     schedule_query_scope_from_config,
@@ -219,6 +225,16 @@ def _week_number_arg(value: str) -> int:
     return number
 
 
+_STUDY_TERM_CODES: dict[str, str] = {"1": "3", "2": "12", "3": "16"}
+
+
+def _study_term_arg(value: str) -> str:
+    code = _STUDY_TERM_CODES.get(value)
+    if code is None:
+        raise argparse.ArgumentTypeError(f"学期必须为 1、2 或 3: {value}")
+    return code
+
+
 def _add_class_schedule_arguments(parser: argparse.ArgumentParser) -> None:
     parser.add_argument(
         "--campus",
@@ -286,6 +302,32 @@ def _add_classroom_arguments(parser: argparse.ArgumentParser) -> None:
         type=_non_negative_int,
         default=50,
         help="最多显示多少间；0 表示全部（上限 5000）。",
+    )
+
+
+def _add_plan_arguments(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument("--grade", help="年级代码，例如 2023。")
+    parser.add_argument("--college", help="学院代码，例如 08。")
+    parser.add_argument("--major", help="专业代码，例如 0810。")
+    parser.add_argument("--plan-id", dest="plan_id", help="教学执行计划 ID。")
+    parser.add_argument(
+        "--list",
+        dest="list_only",
+        action="store_true",
+        help="只列出匹配的教学执行计划，不查询课程。",
+    )
+    parser.add_argument("--course", help="课程号或课程名关键词。")
+    parser.add_argument("--study-year", help="开课学年起始年，例如 2023。")
+    parser.add_argument(
+        "--study-term",
+        type=_study_term_arg,
+        help="开课学期：1、2 或 3。",
+    )
+    parser.add_argument(
+        "--type",
+        dest="study_type",
+        choices=("zx", "fx", "ezy", "exw"),
+        help="修读类型：zx 主修、fx 辅修、ezy 二专业、exw 二学位。",
     )
 
 
@@ -438,6 +480,26 @@ def build_parser() -> argparse.ArgumentParser:
     courses_query_parser.set_defaults(
         handler=_handle_courses_query, parser=courses_query_parser
     )
+
+    plan_parser = _add_subparser(subparsers, "plan", help="查询教学执行计划。")
+    plan_parser.set_defaults(handler=_print_help, parser=plan_parser)
+    plan_subparsers = plan_parser.add_subparsers(dest="plan_command")
+
+    plan_query_parser = _add_subparser(
+        plan_subparsers,
+        "query",
+        help="查询 CUMT 教务系统教学执行计划。",
+        description="查询 CUMT 教务系统教学执行计划。",
+    )
+    _add_query_arguments(
+        plan_query_parser,
+        target="教学执行计划",
+        include_force_email=False,
+        include_output=False,
+        include_scope=False,
+    )
+    _add_plan_arguments(plan_query_parser)
+    plan_query_parser.set_defaults(handler=_handle_plan_query, parser=plan_query_parser)
 
     return parser
 
@@ -721,6 +783,51 @@ def _handle_courses_query(args: argparse.Namespace) -> int:
             weeks=args.weeks,
         )
     )
+    return int(ExitCode.OK)
+
+
+def _handle_plan_query(args: argparse.Namespace) -> int:
+    if not (args.plan_id or args.grade or args.college or args.major):
+        # The unfiltered plan table spans every grade and major, so require a
+        # narrowing filter instead of paging the whole table.
+        args.parser.error(
+            "请提供 --plan-id，或用 --grade/--college/--major 缩小范围"
+            "（可配合 --list）。"
+        )
+
+    filters = PlanFilters(
+        grade=args.grade,
+        college=args.college,
+        major=args.major,
+        plan_id=args.plan_id,
+        list_only=args.list_only,
+        course=args.course,
+        study_year=args.study_year,
+        study_term=args.study_term,
+        study_type=args.study_type,
+    )
+
+    try:
+        config = load_app_config(args)
+        configure_logging(
+            config_path=config.config_path,
+            retention_days=config.logging.retention_days,
+            verbose=args.verbose,
+        )
+        result = query_plan_with_session_reuse(
+            config,
+            filters=filters,
+            trust_env=not args.no_proxy,
+            allow_manual_captcha=not args.no_interactive,
+        )
+    except CUMTJWXTError as exc:
+        print(str(exc), file=sys.stderr)
+        return int(_exit_code_for(exc))
+
+    if args.list_only:
+        print(build_plan_list_text(plans=result.plans, total=result.total))
+    else:
+        print(build_plan_text_summary(result))
     return int(ExitCode.OK)
 
 
