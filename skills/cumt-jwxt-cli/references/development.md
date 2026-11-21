@@ -36,6 +36,8 @@ src/cumt_jwxt_cli/
   classrooms/            空闲教室
   academic/              学业情况（HTML 解析）
   courses/               全校上课情况（guid + POST）
+  class_schedule/        班级课表（列表 → 具体课表）
+  plan/                  教学执行计划（计划头 + 课程）
   notify/                SMTP
 tests/                   pytest，全部 mock 外部服务
 skills/cumt-jwxt-cli/    项目内 agent skill（本文件所在目录）

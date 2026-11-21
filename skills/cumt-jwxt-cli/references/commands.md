@@ -4,7 +4,7 @@
 
 ## 通用参数
 
-成绩/考试/课表：
+成绩/考试/课表/班级课表：
 
 ```text
 --config PATH        配置文件路径
@@ -91,6 +91,29 @@
 3. 输出课程、教师、星期/节次、周次、地点、人数、学分。
 
 结果含教师姓名等公开排课信息，只做终端展示；不包含教工号、性别。`--course` 按接口契约映射到 `kch_id`，传纯课程号可能匹配不到。
+
+## class-schedule query
+
+查询任意可见班级的课表，两段式：`bjkbdy_cxBjkbdyTjkbList.html` 取班级课表列表 → `bjkbdy_cxBjKb.html` 取具体课表。
+
+- 必须给 `--class`，或至少一个 `--grade/--college/--major`；否则退出码 2，且不会发起列表请求。
+- `--list`：只列匹配的班级课表（班级名、代码、专业、年级、校区）。
+- `--class`：班级代码 `bh_id`、班级号 `bh`、班级名 `bjmc` 或课表名 `tjkbmc`；代码走服务端过滤，名称回退子串匹配。
+- `--campus all|nanhu|wenchang`，`--grade/--college/--major` 为教务代码。
+- `--week N`：按 `zcd` 展开后过滤。
+- 多条匹配且未指定 `--class` 时会提示用 `--list` 选代码。
+- 只读列表/课表/节次/周次端点；不调用 PDF、Excel、打印、删除端点；教师联系方式不落盘。
+
+## plan query
+
+查询专业级教学执行计划（培养方案课程），与当前学期无关。
+
+- 必须给 `--plan-id`，或至少一个 `--grade/--college/--major`；`--list` 列出匹配计划。
+- `--plan-id` 单独使用时没有计划头数据，输出只显示计划 ID 与课程数。
+- 课程接口必须同时发送 8 个过滤键（`jyxdxnm, jyxdxqm, yxxdxnm, yxxdxqm, shzt, kch, jxzxjhxx_id, xdlx`，空串也要发），并带 `gnmkdm=N153540`；否则静默 0 条。
+- `--course 关键词` 客户端过滤；`--study-year` 传给 `jyxdxnm`；`--study-term 1|2|3` 映射为 `3/12/16`；`--type zx|fx|ezy|exw`。
+- 输出按建议学年学期分组；计划课程行可能用 `1/2/3` 标记学期，过滤参数用 `3/12/16`，两者都做映射。
+- 只读 GET；不调用导出、计划维护 `*wh*`、报表打印端点。
 
 ## 产物文件名
 
