@@ -1,6 +1,7 @@
 """Command line interface for cumt-jwxt-cli."""
 
 import argparse
+import re
 import sys
 from collections.abc import Sequence
 
@@ -8,6 +9,7 @@ from cumt_jwxt_cli.academic.report import build_academic_text_summary
 from cumt_jwxt_cli.app import (
     query_academic_with_session_reuse,
     query_classrooms_with_session_reuse,
+    query_courses_with_session_reuse,
     query_exams_with_session_reuse,
     query_grades_with_session_reuse,
     query_schedule_with_session_reuse,
@@ -19,6 +21,11 @@ from cumt_jwxt_cli.classrooms.query_fetch import (
 )
 from cumt_jwxt_cli.classrooms.report import build_classrooms_text_summary
 from cumt_jwxt_cli.config import load_app_config
+from cumt_jwxt_cli.courses.query_fetch import (
+    MAX_RESULTS as MAX_COURSE_RESULTS,
+)
+from cumt_jwxt_cli.courses.query_fetch import CourseQueryOptions
+from cumt_jwxt_cli.courses.report import build_courses_text_summary
 from cumt_jwxt_cli.errors import (
     AuthError,
     CaptchaError,
@@ -51,6 +58,7 @@ from cumt_jwxt_cli.state import state_lock
 
 _USAGE_PREFIX = "用法: "
 _HELP_FLAG_HELP = "显示帮助信息并退出。"
+_PERIODS_PATTERN = re.compile(r"^\d+(-\d+)?$")
 
 
 class _ChineseHelpFormatter(argparse.HelpFormatter):
@@ -170,6 +178,44 @@ def _non_negative_int(value: str) -> int:
     if number < 0:
         raise argparse.ArgumentTypeError(f"必须为非负整数: {value}")
     return number
+
+
+def _weekday_arg(value: str) -> int:
+    try:
+        number = int(value)
+    except ValueError as exc:
+        raise argparse.ArgumentTypeError(f"星期必须为 1-7: {value}") from exc
+    if not 1 <= number <= 7:
+        raise argparse.ArgumentTypeError(f"星期必须为 1-7: {value}")
+    return number
+
+
+def _periods_arg(value: str) -> str:
+    if _PERIODS_PATTERN.match(value) is None:
+        raise argparse.ArgumentTypeError(f"节次格式应形如 1-2: {value}")
+    return value
+
+
+def _course_limit_arg(value: str) -> int:
+    number = _non_negative_int(value)
+    if number > MAX_COURSE_RESULTS:
+        raise argparse.ArgumentTypeError(f"上限为 {MAX_COURSE_RESULTS}: {value}")
+    return number
+
+
+def _add_course_arguments(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument("--course", help="课程号或课程 ID。")
+    parser.add_argument("--teacher", help="教师姓名。")
+    parser.add_argument("--room", help="上课场地，例如 博1-A203。")
+    parser.add_argument("--weekday", type=_weekday_arg, help="星期，1-7。")
+    parser.add_argument("--periods", type=_periods_arg, help="上课节次，例如 1-2。")
+    parser.add_argument("--weeks", help="起始周，例如 1。")
+    parser.add_argument(
+        "--limit",
+        type=_course_limit_arg,
+        default=50,
+        help=f"最多显示多少条；0 表示全部（上限 {MAX_COURSE_RESULTS}）。",
+    )
 
 
 def _add_classroom_arguments(parser: argparse.ArgumentParser) -> None:
@@ -297,6 +343,28 @@ def build_parser() -> argparse.ArgumentParser:
     )
     academic_query_parser.set_defaults(
         handler=_handle_academic_query, parser=academic_query_parser
+    )
+
+    courses_parser = _add_subparser(subparsers, "courses", help="按条件查询上课情况。")
+    courses_parser.set_defaults(handler=_print_help, parser=courses_parser)
+    courses_subparsers = courses_parser.add_subparsers(dest="courses_command")
+
+    courses_query_parser = _add_subparser(
+        courses_subparsers,
+        "query",
+        help="按课程、教师或场地查询 CUMT 教务系统上课情况。",
+        description="按课程、教师或场地查询 CUMT 教务系统上课情况。",
+    )
+    _add_query_arguments(
+        courses_query_parser,
+        target="上课情况",
+        include_force_email=False,
+        include_output=False,
+        include_scope=True,
+    )
+    _add_course_arguments(courses_query_parser)
+    courses_query_parser.set_defaults(
+        handler=_handle_courses_query, parser=courses_query_parser
     )
 
     return parser
@@ -481,6 +549,56 @@ def _handle_classrooms_query(args: argparse.Namespace) -> int:
             start=args.start,
             end=args.end,
             campus=args.campus,
+        )
+    )
+    return int(ExitCode.OK)
+
+
+def _handle_courses_query(args: argparse.Namespace) -> int:
+    if not (args.course or args.teacher or args.room):
+        # Pulling the whole teaching plan is over 10k rows, so require at least
+        # one server-side filter instead of fetching everything.
+        args.parser.error("必须至少提供 --course、--teacher 或 --room 之一。")
+
+    options = CourseQueryOptions(
+        course=args.course,
+        teacher=args.teacher,
+        room=args.room,
+        weekday=args.weekday,
+        periods=args.periods,
+        weeks=args.weeks,
+        limit=args.limit,
+    )
+
+    try:
+        config = load_app_config(args)
+        configure_logging(
+            config_path=config.config_path,
+            retention_days=config.logging.retention_days,
+            verbose=args.verbose,
+        )
+        result = query_courses_with_session_reuse(
+            config,
+            options=options,
+            trust_env=not args.no_proxy,
+            allow_manual_captcha=not args.no_interactive,
+        )
+    except CUMTJWXTError as exc:
+        print(str(exc), file=sys.stderr)
+        return int(_exit_code_for(exc))
+
+    print(
+        build_courses_text_summary(
+            sessions=result.sessions,
+            total=result.total,
+            year=config.query.year,
+            semester=config.query.semester,
+            course=args.course,
+            teacher=args.teacher,
+            room=args.room,
+            weekday=args.weekday,
+            periods=args.periods,
+            weeks=args.weeks,
         )
     )
     return int(ExitCode.OK)

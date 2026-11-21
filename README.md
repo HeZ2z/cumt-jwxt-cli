@@ -18,6 +18,7 @@ cumt-jwxt exams query
 cumt-jwxt schedule query
 cumt-jwxt classrooms query --date 2026-11-23
 cumt-jwxt academic query
+cumt-jwxt courses query --teacher 张三
 ```
 
 ## 报告示例
@@ -38,6 +39,7 @@ cumt-jwxt academic query
 - 查询个人课表，检测课程新增/变更，并生成文本摘要。
 - 按日期和时段查询空闲教室，支持校区、楼号、座位数和可借用筛选。
 - 查询累计学业情况，包括总览 GPA、培养方案学分要求和按课程性质统计。
+- 按课程、教师或场地查询上课情况，支持星期、节次和起始周筛选。
 - 可选保存成绩/考试 JSON、HTML 报告，以及考试 ICS 日历文件。
 - 可选保存课表 JSON、HTML 报告，以及个人课表 ICS 日历文件。
 - 在检测到成绩变化或显式强制时发送 SMTP 邮件。
