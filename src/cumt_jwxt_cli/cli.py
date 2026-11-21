@@ -14,6 +14,7 @@ from cumt_jwxt_cli.errors import (
     AuthError,
     CaptchaError,
     ConfigError,
+    CUMTJWXTError,
     ExitCode,
     NotifyError,
     ParseError,
@@ -78,6 +79,60 @@ def _add_subparser(
     return _localize_help(parser)
 
 
+def _add_query_arguments(
+    parser: argparse.ArgumentParser,
+    *,
+    target: str,
+    save_ics: bool = False,
+) -> None:
+    """Add the flags shared by every query subcommand."""
+
+    parser.add_argument(
+        "--config",
+        help=(
+            "本地配置文件路径。默认读取当前目录或项目目录下的 "
+            "config.local.json 或 config.json。"
+        ),
+    )
+    parser.add_argument("--year", help="学年起始年，例如 2025。优先于 query.auto。")
+    parser.add_argument(
+        "--semester", help="学期代码：3 为秋季，12 为春季。优先于 query.auto。"
+    )
+    parser.add_argument(
+        "--force-email",
+        action="store_true",
+        help=f"未检测到{target}变化时也发送通知邮件。",
+    )
+    parser.add_argument(
+        "--no-proxy",
+        action="store_true",
+        help="不使用环境变量中的代理设置。",
+    )
+    parser.add_argument(
+        "--no-interactive",
+        action="store_true",
+        help="缺少配置时直接失败，不进行交互式输入。",
+    )
+    parser.add_argument(
+        "--save-json",
+        action="store_true",
+        help=f"将{target} JSON 保存到配置的输出目录。",
+    )
+    parser.add_argument(
+        "--save-report",
+        action="store_true",
+        help="将 HTML 报告保存到配置的输出目录。",
+    )
+    if save_ics:
+        parser.add_argument(
+            "--save-ics",
+            action="store_true",
+            help="将 ICS 日历文件保存到配置的输出目录。",
+        )
+    parser.add_argument("--output-dir", help="可选 JSON 或报告的输出目录。")
+    parser.add_argument("--verbose", action="store_true", help="输出更详细的日志。")
+
+
 def build_parser() -> argparse.ArgumentParser:
     """Build the CLI argument parser."""
     parser = argparse.ArgumentParser(
@@ -101,55 +156,7 @@ def build_parser() -> argparse.ArgumentParser:
         help="查询 CUMT 教务系统成绩。",
         description="查询 CUMT 教务系统成绩。",
     )
-    query_parser.add_argument(
-        "--config",
-        help=(
-            "本地配置文件路径。默认读取当前目录或项目目录下的 "
-            "config.local.json 或 config.json。"
-        ),
-    )
-    query_parser.add_argument(
-        "--year",
-        help="学年起始年，例如 2024。优先于 query.auto。",
-    )
-    query_parser.add_argument(
-        "--semester",
-        help="学期代码：3 为秋季，12 为春季。优先于 query.auto。",
-    )
-    query_parser.add_argument(
-        "--force-email",
-        action="store_true",
-        help="未检测到成绩变化时也发送通知邮件。",
-    )
-    query_parser.add_argument(
-        "--no-proxy",
-        action="store_true",
-        help="不使用环境变量中的代理设置。",
-    )
-    query_parser.add_argument(
-        "--no-interactive",
-        action="store_true",
-        help="缺少配置时直接失败，不进行交互式输入。",
-    )
-    query_parser.add_argument(
-        "--save-json",
-        action="store_true",
-        help="将成绩 JSON 保存到配置的输出目录。",
-    )
-    query_parser.add_argument(
-        "--save-report",
-        action="store_true",
-        help="将 HTML 报告保存到配置的输出目录。",
-    )
-    query_parser.add_argument(
-        "--output-dir",
-        help="可选 JSON 或报告的输出目录。",
-    )
-    query_parser.add_argument(
-        "--verbose",
-        action="store_true",
-        help="输出更详细的日志。",
-    )
+    _add_query_arguments(query_parser, target="成绩")
     query_parser.set_defaults(handler=_handle_grades_query, parser=query_parser)
 
     exams_parser = _add_subparser(subparsers, "exams", help="查询和管理考试安排。")
@@ -162,60 +169,7 @@ def build_parser() -> argparse.ArgumentParser:
         help="查询 CUMT 教务系统考试安排。",
         description="查询 CUMT 教务系统考试安排。",
     )
-    exams_query_parser.add_argument(
-        "--config",
-        help=(
-            "本地配置文件路径。默认读取当前目录或项目目录下的 "
-            "config.local.json 或 config.json。"
-        ),
-    )
-    exams_query_parser.add_argument(
-        "--year",
-        help="学年起始年，例如 2025。优先于 query.auto。",
-    )
-    exams_query_parser.add_argument(
-        "--semester",
-        help="学期代码：3 为秋季，12 为春季。优先于 query.auto。",
-    )
-    exams_query_parser.add_argument(
-        "--force-email",
-        action="store_true",
-        help="未检测到考试变化时也发送通知邮件。",
-    )
-    exams_query_parser.add_argument(
-        "--no-proxy",
-        action="store_true",
-        help="不使用环境变量中的代理设置。",
-    )
-    exams_query_parser.add_argument(
-        "--no-interactive",
-        action="store_true",
-        help="缺少配置时直接失败，不进行交互式输入。",
-    )
-    exams_query_parser.add_argument(
-        "--save-json",
-        action="store_true",
-        help="将考试安排 JSON 保存到配置的输出目录。",
-    )
-    exams_query_parser.add_argument(
-        "--save-report",
-        action="store_true",
-        help="将 HTML 报告保存到配置的输出目录。",
-    )
-    exams_query_parser.add_argument(
-        "--save-ics",
-        action="store_true",
-        help="将 ICS 日历文件保存到配置的输出目录。",
-    )
-    exams_query_parser.add_argument(
-        "--output-dir",
-        help="可选 JSON 或报告的输出目录。",
-    )
-    exams_query_parser.add_argument(
-        "--verbose",
-        action="store_true",
-        help="输出更详细的日志。",
-    )
+    _add_query_arguments(exams_query_parser, target="考试安排", save_ics=True)
     exams_query_parser.set_defaults(
         handler=_handle_exams_query, parser=exams_query_parser
     )
@@ -232,60 +186,7 @@ def build_parser() -> argparse.ArgumentParser:
         help="查询 CUMT 教务系统个人课表。",
         description="查询 CUMT 教务系统个人课表。",
     )
-    schedule_query_parser.add_argument(
-        "--config",
-        help=(
-            "本地配置文件路径。默认读取当前目录或项目目录下的 "
-            "config.local.json 或 config.json。"
-        ),
-    )
-    schedule_query_parser.add_argument(
-        "--year",
-        help="学年起始年，例如 2025。优先于 query.auto。",
-    )
-    schedule_query_parser.add_argument(
-        "--semester",
-        help="学期代码：3 为秋季，12 为春季。优先于 query.auto。",
-    )
-    schedule_query_parser.add_argument(
-        "--force-email",
-        action="store_true",
-        help="未检测到课表变化时也发送通知邮件。",
-    )
-    schedule_query_parser.add_argument(
-        "--no-proxy",
-        action="store_true",
-        help="不使用环境变量中的代理设置。",
-    )
-    schedule_query_parser.add_argument(
-        "--no-interactive",
-        action="store_true",
-        help="缺少配置时直接失败，不进行交互式输入。",
-    )
-    schedule_query_parser.add_argument(
-        "--save-json",
-        action="store_true",
-        help="将课表 JSON 保存到配置的输出目录。",
-    )
-    schedule_query_parser.add_argument(
-        "--save-report",
-        action="store_true",
-        help="将 HTML 报告保存到配置的输出目录。",
-    )
-    schedule_query_parser.add_argument(
-        "--save-ics",
-        action="store_true",
-        help="将 ICS 日历文件保存到配置的输出目录。",
-    )
-    schedule_query_parser.add_argument(
-        "--output-dir",
-        help="可选 JSON 或报告的输出目录。",
-    )
-    schedule_query_parser.add_argument(
-        "--verbose",
-        action="store_true",
-        help="输出更详细的日志。",
-    )
+    _add_query_arguments(schedule_query_parser, target="课表", save_ics=True)
     schedule_query_parser.set_defaults(
         handler=_handle_schedule_query, parser=schedule_query_parser
     )
@@ -296,6 +197,22 @@ def build_parser() -> argparse.ArgumentParser:
 def _print_help(args: argparse.Namespace) -> int:
     args.parser.print_help()
     return int(ExitCode.OK)
+
+
+def _exit_code_for(exc: CUMTJWXTError) -> ExitCode:
+    if isinstance(exc, ConfigError):
+        return ExitCode.CONFIG_ERROR
+    if isinstance(exc, (AuthError, CaptchaError)):
+        return ExitCode.AUTH_ERROR
+    if isinstance(exc, QueryError):
+        return ExitCode.QUERY_ERROR
+    if isinstance(exc, ParseError):
+        return ExitCode.PARSE_ERROR
+    if isinstance(exc, NotifyError):
+        return ExitCode.NOTIFY_ERROR
+    if isinstance(exc, (SnapshotError, StateError)):
+        return ExitCode.UNKNOWN
+    return ExitCode.UNKNOWN
 
 
 def _handle_grades_query(args: argparse.Namespace) -> int:
@@ -313,24 +230,9 @@ def _handle_grades_query(args: argparse.Namespace) -> int:
                 trust_env=not args.no_proxy,
                 allow_manual_captcha=not args.no_interactive,
             )
-    except ConfigError as exc:
+    except CUMTJWXTError as exc:
         print(str(exc), file=sys.stderr)
-        return int(ExitCode.CONFIG_ERROR)
-    except (AuthError, CaptchaError) as exc:
-        print(str(exc), file=sys.stderr)
-        return int(ExitCode.AUTH_ERROR)
-    except QueryError as exc:
-        print(str(exc), file=sys.stderr)
-        return int(ExitCode.QUERY_ERROR)
-    except ParseError as exc:
-        print(str(exc), file=sys.stderr)
-        return int(ExitCode.PARSE_ERROR)
-    except NotifyError as exc:
-        print(str(exc), file=sys.stderr)
-        return int(ExitCode.NOTIFY_ERROR)
-    except (SnapshotError, StateError) as exc:
-        print(str(exc), file=sys.stderr)
-        return int(ExitCode.UNKNOWN)
+        return int(_exit_code_for(exc))
 
     scope = grade_query_scope_from_config(config.query.year, config.query.semester)
     scope_state = get_grade_query_state(result.state, scope)
@@ -364,24 +266,9 @@ def _handle_exams_query(args: argparse.Namespace) -> int:
                 trust_env=not args.no_proxy,
                 allow_manual_captcha=not args.no_interactive,
             )
-    except ConfigError as exc:
+    except CUMTJWXTError as exc:
         print(str(exc), file=sys.stderr)
-        return int(ExitCode.CONFIG_ERROR)
-    except (AuthError, CaptchaError) as exc:
-        print(str(exc), file=sys.stderr)
-        return int(ExitCode.AUTH_ERROR)
-    except QueryError as exc:
-        print(str(exc), file=sys.stderr)
-        return int(ExitCode.QUERY_ERROR)
-    except ParseError as exc:
-        print(str(exc), file=sys.stderr)
-        return int(ExitCode.PARSE_ERROR)
-    except NotifyError as exc:
-        print(str(exc), file=sys.stderr)
-        return int(ExitCode.NOTIFY_ERROR)
-    except (SnapshotError, StateError) as exc:
-        print(str(exc), file=sys.stderr)
-        return int(ExitCode.UNKNOWN)
+        return int(_exit_code_for(exc))
 
     scope = exam_query_scope_from_config(config.query.year, config.query.semester)
     scope_state = get_exam_query_state(result.state, scope)
@@ -415,24 +302,9 @@ def _handle_schedule_query(args: argparse.Namespace) -> int:
                 trust_env=not args.no_proxy,
                 allow_manual_captcha=not args.no_interactive,
             )
-    except ConfigError as exc:
+    except CUMTJWXTError as exc:
         print(str(exc), file=sys.stderr)
-        return int(ExitCode.CONFIG_ERROR)
-    except (AuthError, CaptchaError) as exc:
-        print(str(exc), file=sys.stderr)
-        return int(ExitCode.AUTH_ERROR)
-    except QueryError as exc:
-        print(str(exc), file=sys.stderr)
-        return int(ExitCode.QUERY_ERROR)
-    except ParseError as exc:
-        print(str(exc), file=sys.stderr)
-        return int(ExitCode.PARSE_ERROR)
-    except NotifyError as exc:
-        print(str(exc), file=sys.stderr)
-        return int(ExitCode.NOTIFY_ERROR)
-    except (SnapshotError, StateError) as exc:
-        print(str(exc), file=sys.stderr)
-        return int(ExitCode.UNKNOWN)
+        return int(_exit_code_for(exc))
 
     scope = schedule_query_scope_from_config(config.query.year, config.query.semester)
     scope_state = get_schedule_query_state(result.state, scope)
