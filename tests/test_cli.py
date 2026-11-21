@@ -20,6 +20,7 @@ from cumt_jwxt_cli.models import (
     ScheduleScopeState,
     ScheduleSlot,
 )
+from cumt_jwxt_cli.state import state_lock
 
 
 def _empty_query_result() -> SimpleNamespace:
@@ -191,6 +192,42 @@ def test_main_runs_grades_query_workflow(capsys, tmp_path, monkeypatch) -> None:
     assert exit_code == int(ExitCode.OK)
     assert "CUMT 成绩报告 2024-2025学年 第二学期" in captured.out
     assert captured.err == ""
+
+
+def test_main_fails_fast_when_state_file_is_locked(
+    capsys, tmp_path, monkeypatch
+) -> None:
+    config_path = tmp_path / "config.local.json"
+    config_path.write_text(
+        json.dumps(
+            {
+                "cumt": {"username": "student", "password": "secret"},
+                "query": {"year": "2024", "semester": "12"},
+                "notify": {"enabled": False},
+            }
+        ),
+        encoding="utf-8",
+    )
+    calls: list[int] = []
+
+    monkeypatch.setattr(cli_module, "configure_logging", lambda **kwargs: None)
+    monkeypatch.setattr(
+        cli_module,
+        "query_grades_with_session_reuse",
+        lambda *args, **kwargs: (calls.append(1), _empty_query_result())[1],
+    )
+
+    with state_lock(SimpleNamespace(config_path=config_path)):
+        locked_exit = main(["grades", "query", "--config", str(config_path)])
+
+    captured = capsys.readouterr()
+    assert locked_exit == int(ExitCode.UNKNOWN)
+    assert calls == []
+    assert "already using this state file" in captured.err
+
+    # The lock is released once the first run exits.
+    assert main(["grades", "query", "--config", str(config_path)]) == int(ExitCode.OK)
+    assert calls == [1]
 
 
 def test_main_uses_proxy_by_default(capsys, tmp_path, monkeypatch) -> None:
