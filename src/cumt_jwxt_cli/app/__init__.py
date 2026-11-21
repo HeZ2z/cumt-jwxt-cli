@@ -7,6 +7,9 @@ from cumt_jwxt_cli.app.session import (
     query_classrooms_with_session_reuse as query_classrooms_with_session_reuse,
 )
 from cumt_jwxt_cli.app.session import (
+    query_courses_with_session_reuse as query_courses_with_session_reuse,
+)
+from cumt_jwxt_cli.app.session import (
     query_exams_with_session_reuse as query_exams_with_session_reuse,
 )
 from cumt_jwxt_cli.app.session import (

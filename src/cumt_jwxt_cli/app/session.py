@@ -16,6 +16,12 @@ from cumt_jwxt_cli.classrooms.query_fetch import (
 from cumt_jwxt_cli.classrooms.service import run_classroom_query
 from cumt_jwxt_cli.client.auth import login
 from cumt_jwxt_cli.client.http import JWXTClient
+from cumt_jwxt_cli.courses.query_fetch import (
+    CourseQueryOptions,
+    CourseQueryResult,
+    is_course_session_query_failure,
+)
+from cumt_jwxt_cli.courses.service import run_course_query
 from cumt_jwxt_cli.errors import QueryError
 from cumt_jwxt_cli.exams.query_fetch import is_exam_session_query_failure
 from cumt_jwxt_cli.exams.service import run_exam_query
@@ -152,6 +158,34 @@ def query_classrooms_with_session_reuse(
         config,
         action=action,
         is_session_failure=is_classroom_session_query_failure,
+        trust_env=trust_env,
+        allow_manual_captcha=allow_manual_captcha,
+    )
+
+
+def query_courses_with_session_reuse(
+    config: AppConfig,
+    *,
+    options: CourseQueryOptions,
+    trust_env: bool,
+    allow_manual_captcha: bool = True,
+) -> CourseQueryResult:
+    """Load state, reuse session cookies, and retry once after session expiry.
+
+    Course queries are read-only and never write state or send notifications.
+    """
+
+    def action(
+        client: object,
+        _previous_state: RuntimeState,
+        _session_updated_at: str | None,
+    ) -> CourseQueryResult:
+        return run_course_query(config, client, options)
+
+    return _with_session(
+        config,
+        action=action,
+        is_session_failure=is_course_session_query_failure,
         trust_env=trust_env,
         allow_manual_captcha=allow_manual_captcha,
     )

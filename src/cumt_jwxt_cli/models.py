@@ -324,6 +324,37 @@ class FreeClassroom:
 
 
 @dataclass(frozen=True)
+class CourseSession:
+    """One course teaching session returned by the course query.
+
+    Fields mirror the JWXT list payload; ``None`` means the field was absent.
+    Staff ids and gender fields are intentionally not modelled because they are
+    not needed for display and belong to other people.
+    """
+
+    course_code: str | None
+    course_name: str | None
+    credits: str | None
+    total_hours: str | None
+    weekly_hours: str | None
+    course_nature: str | None
+    teacher_name: str | None
+    teaching_class: str | None
+    class_composition: str | None
+    class_size: str | None
+    enrolled_count: str | None
+    college: str | None
+    campus: str | None
+    building: str | None
+    room: str | None
+    weekday: str | None
+    periods: str | None
+    start_week: str | None
+    schedule_text: str | None
+    location_text: str | None
+
+
+@dataclass(frozen=True)
 class GradeQueryResult:
     """Pure business result for a completed grade query workflow."""
 
