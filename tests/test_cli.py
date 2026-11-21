@@ -31,6 +31,8 @@ def _empty_query_result() -> SimpleNamespace:
     return SimpleNamespace(
         grades=(),
         changes=(),
+        year="2024",
+        semester="12",
         state=SimpleNamespace(
             grade_queries={
                 GradeQueryScope(year="2024", semester="12"): PerScopeState(
@@ -48,6 +50,8 @@ def _empty_exam_query_result() -> SimpleNamespace:
     return SimpleNamespace(
         exams=(),
         changes=(),
+        year="2025",
+        semester="12",
         state=RuntimeState(
             schema_version=5,
             session_cookies={},
@@ -69,6 +73,8 @@ def _empty_schedule_query_result() -> SimpleNamespace:
         lessons=(),
         changes=(),
         period_times=(),
+        year="2025",
+        semester="12",
         state=RuntimeState(
             schema_version=5,
             session_cookies={},
@@ -196,6 +202,49 @@ def test_main_runs_grades_query_workflow(capsys, tmp_path, monkeypatch) -> None:
     assert exit_code == int(ExitCode.OK)
     assert "CUMT 成绩报告 2024-2025学年 第二学期" in captured.out
     assert captured.err == ""
+
+
+def test_main_uses_result_scope_for_grades_output(
+    capsys, tmp_path, monkeypatch
+) -> None:
+    config_path = tmp_path / "config.local.json"
+    config_path.write_text(
+        json.dumps(
+            {
+                "cumt": {"username": "student", "password": "secret"},
+                "query": {"year": "2024", "semester": "12"},
+            }
+        ),
+        encoding="utf-8",
+    )
+    result = SimpleNamespace(
+        grades=(),
+        changes=(),
+        year="2025",
+        semester="3",
+        state=SimpleNamespace(
+            grade_queries={
+                GradeQueryScope(year="2025", semester="3"): PerScopeState(
+                    snapshot=(),
+                    last_successful_query_at="2026-05-07T12:00:00+08:00",
+                    last_notified_at=None,
+                )
+            }
+        ),
+    )
+
+    monkeypatch.setattr(cli_module, "configure_logging", lambda **kwargs: None)
+    monkeypatch.setattr(
+        cli_module,
+        "query_grades_with_session_reuse",
+        lambda config, *, force_email, trust_env, allow_manual_captcha: result,
+    )
+
+    exit_code = main(["grades", "query", "--config", str(config_path)])
+
+    captured = capsys.readouterr()
+    assert exit_code == int(ExitCode.OK)
+    assert "CUMT 成绩报告 2025-2026学年 第一学期" in captured.out
 
 
 def test_main_fails_fast_when_state_file_is_locked(
@@ -683,6 +732,8 @@ def test_main_schedule_query_includes_clock_times(
             PeriodTime(period="1", start="08:00", end="08:50"),
             PeriodTime(period="2", start="08:55", end="09:45"),
         ),
+        year="2025",
+        semester="12",
         state=RuntimeState(
             schema_version=5,
             session_cookies={},
@@ -1456,7 +1507,7 @@ def test_main_runs_courses_query_workflow(capsys, tmp_path, monkeypatch) -> None
                 "allow_manual_captcha": allow_manual_captcha,
             }
         )
-        return CourseQueryResult(sessions=(), total=0)
+        return CourseQueryResult(sessions=(), total=0, year="2026", semester="3")
 
     monkeypatch.setattr(cli_module, "query_courses_with_session_reuse", fake_query)
 
@@ -1476,10 +1527,6 @@ def test_main_runs_courses_query_workflow(capsys, tmp_path, monkeypatch) -> None
             "1",
             "--limit",
             "10",
-            "--year",
-            "2026",
-            "--semester",
-            "3",
         ]
     )
     captured = capsys.readouterr()
@@ -1502,7 +1549,7 @@ def test_main_runs_courses_query_workflow(capsys, tmp_path, monkeypatch) -> None
     assert calls[0]["trust_env"] is True
     assert calls[0]["allow_manual_captcha"] is True
     config = calls[0]["config"]
-    assert config.query.year == "2026"
+    assert config.query.year == "2025"
     assert config.query.semester == "3"
 
 
@@ -1527,7 +1574,7 @@ def test_courses_query_no_proxy_and_no_interactive(
         calls.append(
             {"trust_env": trust_env, "allow_manual_captcha": allow_manual_captcha}
         )
-        return CourseQueryResult(sessions=(), total=0)
+        return CourseQueryResult(sessions=(), total=0, year="2025", semester="3")
 
     monkeypatch.setattr(cli_module, "query_courses_with_session_reuse", fake_query)
 

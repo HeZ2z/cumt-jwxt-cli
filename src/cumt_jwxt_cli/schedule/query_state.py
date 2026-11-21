@@ -91,6 +91,8 @@ def build_schedule_query_result(
         changes=changes,
         state=next_state,
         period_times=tuple(period_times),
+        year=scope.year,
+        semester=scope.semester,
     )
 
 

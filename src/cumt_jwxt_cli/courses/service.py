@@ -23,7 +23,12 @@ def run_course_query(
     ordered = sorted(fetched.sessions, key=_sort_key)
     if options.limit > 0:
         ordered = ordered[: options.limit]
-    return CourseQueryResult(sessions=tuple(ordered), total=fetched.total)
+    return CourseQueryResult(
+        sessions=tuple(ordered),
+        total=fetched.total,
+        year=fetched.year,
+        semester=fetched.semester,
+    )
 
 
 def _sort_key(session: CourseSession) -> tuple[int, int, str, str]:

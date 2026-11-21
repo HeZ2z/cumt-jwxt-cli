@@ -15,10 +15,15 @@ class CUMTConfig:
 
 @dataclass(frozen=True)
 class QueryConfig:
-    """Default grade query configuration."""
+    """Default grade query configuration.
+
+    An empty ``year``/``semester`` pair is only valid when ``auto`` is true; the
+    orchestrator then resolves the term from JWXT after login.
+    """
 
     year: str
     semester: str
+    auto: bool = False
 
 
 @dataclass(frozen=True)
@@ -302,6 +307,8 @@ class ExamQueryResult:
     snapshot: tuple[ExamSnapshotEntry, ...]
     changes: tuple[ExamChange, ...]
     state: RuntimeState
+    year: str = ""
+    semester: str = ""
 
 
 @dataclass(frozen=True)
@@ -363,6 +370,8 @@ class GradeQueryResult:
     changes: tuple[GradeChange, ...]
     details: tuple[GradeDetail, ...]
     state: RuntimeState
+    year: str = ""
+    semester: str = ""
 
 
 @dataclass(frozen=True)
@@ -392,6 +401,8 @@ class ScheduleQueryResult:
     changes: tuple[ScheduleChange, ...]
     state: RuntimeState
     period_times: tuple[PeriodTime, ...] = ()
+    year: str = ""
+    semester: str = ""
 
 
 @dataclass(frozen=True)
