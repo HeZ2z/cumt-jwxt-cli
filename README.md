@@ -20,6 +20,7 @@ cumt-jwxt classrooms query --date 2026-11-23
 cumt-jwxt class-schedule query --list --campus nanhu --grade 2023
 cumt-jwxt academic query
 cumt-jwxt courses query --teacher 张三
+cumt-jwxt plan query --list --grade 2023 --college 08 --major 0810
 ```
 
 ## 报告示例
@@ -42,6 +43,7 @@ cumt-jwxt courses query --teacher 张三
 - 按校区、年级、学院、专业筛选班级课表，支持 `--list` 列出候选并用 `--class` 查询具体课表或按周过滤。
 - 查询累计学业情况，包括总览 GPA、培养方案学分要求和按课程性质统计。
 - 按课程、教师或场地查询上课情况，支持星期、节次和起始周筛选。
+- 查询专业级教学执行计划，支持按年级、学院、专业定位，列出计划或查看课程。
 - 可选保存成绩/考试 JSON、HTML 报告，以及考试 ICS 日历文件。
 - 可选保存课表 JSON、HTML 报告，以及个人课表 ICS 日历文件。
 - 在检测到成绩变化或显式强制时发送 SMTP 邮件。

@@ -23,6 +23,9 @@ from cumt_jwxt_cli.models import (
     ScheduleLesson,
     ScheduleScopeState,
     ScheduleSlot,
+    TeachingPlanCourse,
+    TeachingPlanHeader,
+    TeachingPlanResult,
 )
 from cumt_jwxt_cli.state import state_lock
 
@@ -1637,6 +1640,274 @@ def test_courses_query_maps_runtime_errors_to_exit_codes(
             str(config_path),
             "--teacher",
             "张三",
+        ]
+    )
+    captured = capsys.readouterr()
+
+    assert exit_code == int(expected_code)
+    assert str(raised) in captured.err
+
+
+# -- plan -----------------------------------------------------------------
+
+
+def _plan_result() -> TeachingPlanResult:
+    return TeachingPlanResult(
+        header=TeachingPlanHeader(
+            plan_id="PLAN-1",
+            grade="2023",
+            major_code="0810",
+            major_name="计算机科学与技术",
+            college_id="08",
+            campus="南湖校区",
+            program_length="4",
+            course_count="112",
+            total_credits="171.0",
+        ),
+        courses=(
+            TeachingPlanCourse(
+                course_code="M1",
+                course_name="高等数学",
+                course_name_en=None,
+                credits="5.0",
+                total_hours="80",
+                study_year="2023",
+                study_term="3",
+                allowed_terms=None,
+                category_name="通识必修",
+                class_category=None,
+                assessment_method="考试",
+                exam_method="考试",
+                department="数学学院",
+                week_range=None,
+                study_type="zx",
+                status="0",
+            ),
+        ),
+        total=1,
+    )
+
+
+def test_build_parser_parses_plan_query() -> None:
+    parser = build_parser()
+
+    args = parser.parse_args(
+        [
+            "plan",
+            "query",
+            "--grade",
+            "2023",
+            "--college",
+            "08",
+            "--major",
+            "0810",
+            "--plan-id",
+            "PLAN-1",
+            "--list",
+            "--course",
+            "数学",
+            "--study-year",
+            "2023",
+            "--study-term",
+            "2",
+            "--type",
+            "zx",
+            "--config",
+            "config.test.json",
+            "--no-proxy",
+            "--no-interactive",
+            "--verbose",
+        ]
+    )
+
+    assert args.command == "plan"
+    assert args.plan_command == "query"
+    assert args.grade == "2023"
+    assert args.college == "08"
+    assert args.major == "0810"
+    assert args.plan_id == "PLAN-1"
+    assert args.list_only is True
+    assert args.course == "数学"
+    assert args.study_year == "2023"
+    # The CLI maps 1/2/3 to JWXT's 3/12/16.
+    assert args.study_term == "12"
+    assert args.study_type == "zx"
+    assert args.no_proxy is True
+    assert args.no_interactive is True
+    assert args.verbose is True
+
+
+@pytest.mark.parametrize(
+    "argv",
+    [
+        ["plan", "query", "--grade", "2023", "--study-term", "4"],
+        ["plan", "query", "--grade", "2023", "--type", "other"],
+        ["plan", "query", "--grade", "2023", "--year", "2025"],
+        ["plan", "query", "--grade", "2023", "--semester", "12"],
+        ["plan", "query", "--grade", "2023", "--save-json"],
+        ["plan", "query", "--grade", "2023", "--force-email"],
+    ],
+)
+def test_plan_query_rejects_invalid_arguments(capsys, argv: list[str]) -> None:
+    with pytest.raises(SystemExit) as excinfo:
+        main(argv)
+
+    assert excinfo.value.code == 2
+    assert capsys.readouterr().err != ""
+
+
+def test_plan_query_requires_lookup_filter(capsys) -> None:
+    with pytest.raises(SystemExit) as excinfo:
+        main(["plan", "query", "--list"])
+
+    assert excinfo.value.code == 2
+    assert "--plan-id" in capsys.readouterr().err
+
+
+def test_main_shows_help_for_plan_command(capsys) -> None:
+    exit_code = main(["plan"])
+
+    captured = capsys.readouterr()
+
+    assert exit_code == int(ExitCode.OK)
+    assert "用法: cumt-jwxt plan" in captured.out
+    assert captured.err == ""
+
+
+def test_main_runs_plan_query_workflow(capsys, tmp_path, monkeypatch) -> None:
+    config_path = tmp_path / "config.local.json"
+    config_path.write_text(
+        json.dumps(
+            {
+                "cumt": {"username": "student", "password": "secret"},
+                "query": {"year": "2025", "semester": "12"},
+            }
+        ),
+        encoding="utf-8",
+    )
+    calls: list[dict[str, object]] = []
+
+    monkeypatch.setattr(cli_module, "configure_logging", lambda **kwargs: None)
+
+    def fake_query(config, *, filters, trust_env, allow_manual_captcha):
+        calls.append(
+            {
+                "filters": filters,
+                "trust_env": trust_env,
+                "allow_manual_captcha": allow_manual_captcha,
+            }
+        )
+        return _plan_result()
+
+    monkeypatch.setattr(cli_module, "query_plan_with_session_reuse", fake_query)
+
+    exit_code = main(
+        [
+            "plan",
+            "query",
+            "--plan-id",
+            "PLAN-1",
+            "--config",
+            str(config_path),
+        ]
+    )
+    captured = capsys.readouterr()
+
+    assert exit_code == int(ExitCode.OK)
+    assert captured.err == ""
+    assert "CUMT 教学执行计划" in captured.out
+    assert len(calls) == 1
+    assert calls[0]["trust_env"] is True
+    assert calls[0]["allow_manual_captcha"] is True
+    assert calls[0]["filters"].plan_id == "PLAN-1"
+
+
+def test_plan_query_list_workflow(capsys, tmp_path, monkeypatch) -> None:
+    config_path = tmp_path / "config.local.json"
+    config_path.write_text(
+        json.dumps(
+            {
+                "cumt": {"username": "student", "password": "secret"},
+                "query": {"year": "2025", "semester": "12"},
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    monkeypatch.setattr(cli_module, "configure_logging", lambda **kwargs: None)
+    monkeypatch.setattr(
+        cli_module,
+        "query_plan_with_session_reuse",
+        lambda *args, **kwargs: TeachingPlanResult(
+            header=None,
+            plans=(_plan_result().header,),
+            total=1,
+            list_only=True,
+        ),
+    )
+
+    exit_code = main(
+        [
+            "plan",
+            "query",
+            "--list",
+            "--grade",
+            "2023",
+            "--config",
+            str(config_path),
+        ]
+    )
+    captured = capsys.readouterr()
+
+    assert exit_code == int(ExitCode.OK)
+    assert "CUMT 教学执行计划列表" in captured.out
+    assert "PLAN-1" in captured.out
+
+
+@pytest.mark.parametrize(
+    ("raised", "expected_code"),
+    [
+        (cli_module.AuthError("auth"), ExitCode.AUTH_ERROR),
+        (cli_module.QueryError("query"), ExitCode.QUERY_ERROR),
+        (cli_module.ParseError("parse"), ExitCode.PARSE_ERROR),
+        (cli_module.ConfigError("config"), ExitCode.CONFIG_ERROR),
+    ],
+)
+def test_plan_query_maps_runtime_errors_to_exit_codes(
+    capsys,
+    tmp_path,
+    monkeypatch,
+    raised: Exception,
+    expected_code: ExitCode,
+) -> None:
+    config_path = tmp_path / "config.local.json"
+    config_path.write_text(
+        json.dumps(
+            {
+                "cumt": {"username": "student", "password": "secret"},
+                "query": {"year": "2025", "semester": "12"},
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    monkeypatch.setattr(cli_module, "configure_logging", lambda **kwargs: None)
+
+    def raise_runtime_error(config, *, filters, trust_env, allow_manual_captcha):
+        raise raised
+
+    monkeypatch.setattr(
+        cli_module, "query_plan_with_session_reuse", raise_runtime_error
+    )
+
+    exit_code = main(
+        [
+            "plan",
+            "query",
+            "--grade",
+            "2023",
+            "--config",
+            str(config_path),
         ]
     )
     captured = capsys.readouterr()
