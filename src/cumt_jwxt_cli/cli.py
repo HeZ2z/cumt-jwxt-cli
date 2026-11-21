@@ -5,10 +5,17 @@ import sys
 from collections.abc import Sequence
 
 from cumt_jwxt_cli.app import (
+    query_classrooms_with_session_reuse,
     query_exams_with_session_reuse,
     query_grades_with_session_reuse,
     query_schedule_with_session_reuse,
 )
+from cumt_jwxt_cli.classrooms.query_fetch import (
+    ClassroomQueryOptions,
+    parse_clock,
+    parse_date,
+)
+from cumt_jwxt_cli.classrooms.report import build_classrooms_text_summary
 from cumt_jwxt_cli.config import load_app_config
 from cumt_jwxt_cli.errors import (
     AuthError,
@@ -84,6 +91,8 @@ def _add_query_arguments(
     *,
     target: str,
     save_ics: bool = False,
+    include_force_email: bool = True,
+    include_output: bool = True,
 ) -> None:
     """Add the flags shared by every query subcommand."""
 
@@ -98,11 +107,12 @@ def _add_query_arguments(
     parser.add_argument(
         "--semester", help="学期代码：3 为秋季，12 为春季。优先于 query.auto。"
     )
-    parser.add_argument(
-        "--force-email",
-        action="store_true",
-        help=f"未检测到{target}变化时也发送通知邮件。",
-    )
+    if include_force_email:
+        parser.add_argument(
+            "--force-email",
+            action="store_true",
+            help=f"未检测到{target}变化时也发送通知邮件。",
+        )
     parser.add_argument(
         "--no-proxy",
         action="store_true",
@@ -113,24 +123,76 @@ def _add_query_arguments(
         action="store_true",
         help="缺少配置时直接失败，不进行交互式输入。",
     )
-    parser.add_argument(
-        "--save-json",
-        action="store_true",
-        help=f"将{target} JSON 保存到配置的输出目录。",
-    )
-    parser.add_argument(
-        "--save-report",
-        action="store_true",
-        help="将 HTML 报告保存到配置的输出目录。",
-    )
-    if save_ics:
+    if include_output:
         parser.add_argument(
-            "--save-ics",
+            "--save-json",
             action="store_true",
-            help="将 ICS 日历文件保存到配置的输出目录。",
+            help=f"将{target} JSON 保存到配置的输出目录。",
         )
-    parser.add_argument("--output-dir", help="可选 JSON 或报告的输出目录。")
+        parser.add_argument(
+            "--save-report",
+            action="store_true",
+            help="将 HTML 报告保存到配置的输出目录。",
+        )
+        if save_ics:
+            parser.add_argument(
+                "--save-ics",
+                action="store_true",
+                help="将 ICS 日历文件保存到配置的输出目录。",
+            )
+        parser.add_argument("--output-dir", help="可选 JSON 或报告的输出目录。")
     parser.add_argument("--verbose", action="store_true", help="输出更详细的日志。")
+
+
+def _date_arg(value: str) -> str:
+    try:
+        return parse_date(value)
+    except ValueError as exc:
+        raise argparse.ArgumentTypeError(str(exc)) from exc
+
+
+def _clock_arg(value: str) -> str:
+    try:
+        return parse_clock(value)
+    except ValueError as exc:
+        raise argparse.ArgumentTypeError(str(exc)) from exc
+
+
+def _non_negative_int(value: str) -> int:
+    try:
+        number = int(value)
+    except ValueError as exc:
+        raise argparse.ArgumentTypeError(f"必须为整数: {value}") from exc
+    if number < 0:
+        raise argparse.ArgumentTypeError(f"必须为非负整数: {value}")
+    return number
+
+
+def _add_classroom_arguments(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument(
+        "--date",
+        required=True,
+        type=_date_arg,
+        help="查询日期，格式 YYYY-MM-DD。",
+    )
+    parser.add_argument("--start", type=_clock_arg, help="起始时刻，格式 HH:MM。")
+    parser.add_argument("--end", type=_clock_arg, help="结束时刻，格式 HH:MM。")
+    parser.add_argument(
+        "--campus",
+        choices=("all", "nanhu", "wenchang"),
+        default="all",
+        help="校区：all 全部、nanhu 南湖、wenchang 文昌。",
+    )
+    parser.add_argument("--building", default="", help="楼号，例如 博1。")
+    parser.add_argument("--min-seats", type=_non_negative_int, help="最小座位数。")
+    parser.add_argument("--max-seats", type=_non_negative_int, help="最大座位数。")
+    parser.add_argument("--lendable", action="store_true", help="仅显示可借用教室。")
+    parser.add_argument(
+        "--limit",
+        type=_non_negative_int,
+        default=50,
+        help="最多显示多少间；0 表示全部（上限 5000）。",
+    )
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -189,6 +251,27 @@ def build_parser() -> argparse.ArgumentParser:
     _add_query_arguments(schedule_query_parser, target="课表", save_ics=True)
     schedule_query_parser.set_defaults(
         handler=_handle_schedule_query, parser=schedule_query_parser
+    )
+
+    classrooms_parser = _add_subparser(subparsers, "classrooms", help="查询空闲教室。")
+    classrooms_parser.set_defaults(handler=_print_help, parser=classrooms_parser)
+    classrooms_subparsers = classrooms_parser.add_subparsers(dest="classrooms_command")
+
+    classrooms_query_parser = _add_subparser(
+        classrooms_subparsers,
+        "query",
+        help="查询 CUMT 教务系统空闲教室。",
+        description="查询 CUMT 教务系统空闲教室。",
+    )
+    _add_query_arguments(
+        classrooms_query_parser,
+        target="空闲教室",
+        include_force_email=False,
+        include_output=False,
+    )
+    _add_classroom_arguments(classrooms_query_parser)
+    classrooms_query_parser.set_defaults(
+        handler=_handle_classrooms_query, parser=classrooms_query_parser
     )
 
     return parser
@@ -319,6 +402,60 @@ def _handle_schedule_query(args: argparse.Namespace) -> int:
             semester=config.query.semester,
             queried_at=queried_at or "",
             period_times=result.period_times,
+        )
+    )
+    return int(ExitCode.OK)
+
+
+def _handle_classrooms_query(args: argparse.Namespace) -> int:
+    if (args.start is None) != (args.end is None):
+        args.parser.error("--start 和 --end 必须同时提供或同时省略。")
+    if args.start and args.end and args.start > args.end:
+        args.parser.error("--start 不能晚于 --end。")
+    if (
+        args.min_seats is not None
+        and args.max_seats is not None
+        and args.min_seats > args.max_seats
+    ):
+        args.parser.error("--min-seats 不能大于 --max-seats。")
+
+    options = ClassroomQueryOptions(
+        date=args.date,
+        start=args.start,
+        end=args.end,
+        campus=args.campus,
+        building=args.building,
+        min_seats=args.min_seats,
+        max_seats=args.max_seats,
+        lendable=args.lendable,
+        limit=args.limit,
+    )
+
+    try:
+        config = load_app_config(args)
+        configure_logging(
+            config_path=config.config_path,
+            retention_days=config.logging.retention_days,
+            verbose=args.verbose,
+        )
+        result = query_classrooms_with_session_reuse(
+            config,
+            options=options,
+            trust_env=not args.no_proxy,
+            allow_manual_captcha=not args.no_interactive,
+        )
+    except CUMTJWXTError as exc:
+        print(str(exc), file=sys.stderr)
+        return int(_exit_code_for(exc))
+
+    print(
+        build_classrooms_text_summary(
+            classrooms=result.classrooms,
+            total=result.total,
+            date=args.date,
+            start=args.start,
+            end=args.end,
+            campus=args.campus,
         )
     )
     return int(ExitCode.OK)

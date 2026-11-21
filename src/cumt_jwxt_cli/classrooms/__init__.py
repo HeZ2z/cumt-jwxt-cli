@@ -1,0 +1,1 @@
+"""Free classroom query support."""

@@ -6,6 +6,12 @@ from collections.abc import Callable
 from typing import TypeVar
 
 from cumt_jwxt_cli.captcha.ddddocr_ocr import recognize_captcha
+from cumt_jwxt_cli.classrooms.query_fetch import (
+    ClassroomQueryOptions,
+    ClassroomQueryResult,
+    is_classroom_session_query_failure,
+)
+from cumt_jwxt_cli.classrooms.service import run_classroom_query
 from cumt_jwxt_cli.client.auth import login
 from cumt_jwxt_cli.client.http import JWXTClient
 from cumt_jwxt_cli.errors import QueryError
@@ -16,6 +22,7 @@ from cumt_jwxt_cli.models import (
     AppConfig,
     ExamQueryResult,
     GradeQueryResult,
+    RuntimeState,
     ScheduleQueryResult,
 )
 from cumt_jwxt_cli.schedule.query_fetch import is_schedule_session_query_failure
@@ -35,11 +42,24 @@ def query_grades_with_session_reuse(
 ) -> GradeQueryResult:
     """Load state, reuse session cookies, and retry once after session expiry."""
 
-    return _query_with_session_reuse(
+    def action(
+        client: object,
+        previous_state: RuntimeState,
+        session_updated_at: str | None,
+    ) -> GradeQueryResult:
+        return run_grade_query(
+            config,
+            client,
+            previous_state=previous_state,
+            session_cookies=client.export_cookies(),
+            session_updated_at=session_updated_at,
+            force_email=force_email,
+        )
+
+    return _with_session(
         config,
-        run_query=run_grade_query,
+        action=action,
         is_session_failure=is_session_query_failure,
-        force_email=force_email,
         trust_env=trust_env,
         allow_manual_captcha=allow_manual_captcha,
     )
@@ -54,11 +74,24 @@ def query_exams_with_session_reuse(
 ) -> ExamQueryResult:
     """Load state, reuse session cookies, and retry once after session expiry."""
 
-    return _query_with_session_reuse(
+    def action(
+        client: object,
+        previous_state: RuntimeState,
+        session_updated_at: str | None,
+    ) -> ExamQueryResult:
+        return run_exam_query(
+            config,
+            client,
+            previous_state=previous_state,
+            session_cookies=client.export_cookies(),
+            session_updated_at=session_updated_at,
+            force_email=force_email,
+        )
+
+    return _with_session(
         config,
-        run_query=run_exam_query,
+        action=action,
         is_session_failure=is_exam_session_query_failure,
-        force_email=force_email,
         trust_env=trust_env,
         allow_manual_captcha=allow_manual_captcha,
     )
@@ -73,22 +106,59 @@ def query_schedule_with_session_reuse(
 ) -> ScheduleQueryResult:
     """Load state, reuse session cookies, and retry once after session expiry."""
 
-    return _query_with_session_reuse(
+    def action(
+        client: object,
+        previous_state: RuntimeState,
+        session_updated_at: str | None,
+    ) -> ScheduleQueryResult:
+        return run_schedule_query(
+            config,
+            client,
+            previous_state=previous_state,
+            session_cookies=client.export_cookies(),
+            session_updated_at=session_updated_at,
+            force_email=force_email,
+        )
+
+    return _with_session(
         config,
-        run_query=run_schedule_query,
+        action=action,
         is_session_failure=is_schedule_session_query_failure,
-        force_email=force_email,
         trust_env=trust_env,
         allow_manual_captcha=allow_manual_captcha,
     )
 
 
-def _query_with_session_reuse(
+def query_classrooms_with_session_reuse(
     config: AppConfig,
     *,
-    run_query: Callable[..., _ResultT],
+    options: ClassroomQueryOptions,
+    trust_env: bool,
+    allow_manual_captcha: bool = True,
+) -> ClassroomQueryResult:
+    """Load state, reuse session cookies, and retry once after session expiry."""
+
+    def action(
+        client: object,
+        _previous_state: RuntimeState,
+        _session_updated_at: str | None,
+    ) -> ClassroomQueryResult:
+        return run_classroom_query(config, client, options)
+
+    return _with_session(
+        config,
+        action=action,
+        is_session_failure=is_classroom_session_query_failure,
+        trust_env=trust_env,
+        allow_manual_captcha=allow_manual_captcha,
+    )
+
+
+def _with_session(
+    config: AppConfig,
+    *,
+    action: Callable[[object, RuntimeState, str | None], _ResultT],
     is_session_failure: Callable[[QueryError], bool],
-    force_email: bool,
     trust_env: bool,
     allow_manual_captcha: bool,
 ) -> _ResultT:
@@ -108,28 +178,14 @@ def _query_with_session_reuse(
             session_updated_at = _now_iso()
 
         try:
-            return run_query(
-                config,
-                client,
-                previous_state=previous_state,
-                session_cookies=client.export_cookies(),
-                session_updated_at=session_updated_at,
-                force_email=force_email,
-            )
+            return action(client, previous_state, session_updated_at)
         except QueryError as exc:
             if not previous_state.session_cookies or not is_session_failure(exc):
                 raise
 
             client.reset_session()
             _login(config, client, allow_manual_captcha=allow_manual_captcha)
-            return run_query(
-                config,
-                client,
-                previous_state=previous_state,
-                session_cookies=client.export_cookies(),
-                session_updated_at=_now_iso(),
-                force_email=force_email,
-            )
+            return action(client, previous_state, _now_iso())
 
 
 def _login(
