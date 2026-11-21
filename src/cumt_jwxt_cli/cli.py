@@ -8,11 +8,17 @@ from collections.abc import Sequence
 from cumt_jwxt_cli.academic.report import build_academic_text_summary
 from cumt_jwxt_cli.app import (
     query_academic_with_session_reuse,
+    query_class_schedule_with_session_reuse,
     query_classrooms_with_session_reuse,
     query_courses_with_session_reuse,
     query_exams_with_session_reuse,
     query_grades_with_session_reuse,
     query_schedule_with_session_reuse,
+)
+from cumt_jwxt_cli.class_schedule.query_fetch import ClassScheduleFilters
+from cumt_jwxt_cli.class_schedule.report import (
+    build_class_schedule_list_text,
+    build_class_schedule_text_summary,
 )
 from cumt_jwxt_cli.classrooms.query_fetch import (
     ClassroomQueryOptions,
@@ -203,6 +209,44 @@ def _course_limit_arg(value: str) -> int:
     return number
 
 
+def _week_number_arg(value: str) -> int:
+    try:
+        number = int(value)
+    except ValueError as exc:
+        raise argparse.ArgumentTypeError(f"周次必须为 1-30: {value}") from exc
+    if not 1 <= number <= 30:
+        raise argparse.ArgumentTypeError(f"周次必须为 1-30: {value}")
+    return number
+
+
+def _add_class_schedule_arguments(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument(
+        "--campus",
+        choices=("all", "nanhu", "wenchang"),
+        default="all",
+        help="校区：all 全部、nanhu 南湖、wenchang 文昌。",
+    )
+    parser.add_argument("--grade", help="年级代码，例如 2023。")
+    parser.add_argument("--college", help="学院代码，例如 08。")
+    parser.add_argument("--major", help="专业代码，例如 0810。")
+    parser.add_argument(
+        "--class",
+        dest="class_query",
+        help="班级代码、班级号、班级名或课表名；支持名称子串匹配。",
+    )
+    parser.add_argument(
+        "--list",
+        dest="list_only",
+        action="store_true",
+        help="只列出匹配的班级课表，不查询具体课表。",
+    )
+    parser.add_argument(
+        "--week",
+        type=_week_number_arg,
+        help="只显示包含该周的课程，1-30。",
+    )
+
+
 def _add_course_arguments(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--course", help="课程号或课程 ID。")
     parser.add_argument("--teacher", help="教师姓名。")
@@ -322,6 +366,34 @@ def build_parser() -> argparse.ArgumentParser:
     _add_classroom_arguments(classrooms_query_parser)
     classrooms_query_parser.set_defaults(
         handler=_handle_classrooms_query, parser=classrooms_query_parser
+    )
+
+    class_schedule_parser = _add_subparser(
+        subparsers, "class-schedule", help="查询班级课表。"
+    )
+    class_schedule_parser.set_defaults(
+        handler=_print_help, parser=class_schedule_parser
+    )
+    class_schedule_subparsers = class_schedule_parser.add_subparsers(
+        dest="class_schedule_command"
+    )
+
+    class_schedule_query_parser = _add_subparser(
+        class_schedule_subparsers,
+        "query",
+        help="查询 CUMT 教务系统班级课表。",
+        description="查询 CUMT 教务系统班级课表。",
+    )
+    _add_query_arguments(
+        class_schedule_query_parser,
+        target="班级课表",
+        include_force_email=False,
+        include_output=False,
+        include_scope=True,
+    )
+    _add_class_schedule_arguments(class_schedule_query_parser)
+    class_schedule_query_parser.set_defaults(
+        handler=_handle_class_schedule_query, parser=class_schedule_query_parser
     )
 
     academic_parser = _add_subparser(subparsers, "academic", help="查询学业情况。")
@@ -551,6 +623,54 @@ def _handle_classrooms_query(args: argparse.Namespace) -> int:
             campus=args.campus,
         )
     )
+    return int(ExitCode.OK)
+
+
+def _handle_class_schedule_query(args: argparse.Namespace) -> int:
+    filters = ClassScheduleFilters(
+        campus=args.campus,
+        grade=args.grade,
+        college=args.college,
+        major=args.major,
+        class_query=args.class_query,
+        week=args.week,
+        list_only=args.list_only,
+    )
+
+    try:
+        config = load_app_config(args)
+        configure_logging(
+            config_path=config.config_path,
+            retention_days=config.logging.retention_days,
+            verbose=args.verbose,
+        )
+        result = query_class_schedule_with_session_reuse(
+            config,
+            filters=filters,
+            trust_env=not args.no_proxy,
+            allow_manual_captcha=not args.no_interactive,
+        )
+    except CUMTJWXTError as exc:
+        print(str(exc), file=sys.stderr)
+        return int(_exit_code_for(exc))
+
+    if args.list_only:
+        print(
+            build_class_schedule_list_text(
+                entries=result.entries,
+                total=result.total,
+            )
+        )
+    else:
+        print(
+            build_class_schedule_text_summary(
+                entry=result.entry,
+                lessons=result.lessons,
+                year=result.year,
+                semester=result.semester,
+                week=result.week,
+            )
+        )
     return int(ExitCode.OK)
 
 

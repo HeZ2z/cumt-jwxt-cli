@@ -331,6 +331,44 @@ class FreeClassroom:
 
 
 @dataclass(frozen=True)
+class ClassScheduleEntry:
+    """One class timetable entry from the JWXT class timetable list.
+
+    Display fields mirror the list payload; ``None`` means the field was
+    absent. The ``*_id`` fields are only used to build the follow-up timetable
+    request and are never shown.
+    """
+
+    schedule_code: str | None
+    schedule_aux: str | None
+    schedule_name: str | None
+    class_id: str | None
+    class_code: str | None
+    class_name: str | None
+    major_name: str | None
+    grade_name: str | None
+    college_name: str | None
+    campus: str | None
+    student_count: str | None
+    campus_id: str | None = None
+    grade_id: str | None = None
+    major_id: str | None = None
+
+
+@dataclass(frozen=True)
+class ClassScheduleResult:
+    """Pure business result for a completed class timetable workflow."""
+
+    entry: ClassScheduleEntry | None
+    lessons: tuple[ScheduleLesson, ...]
+    year: str = ""
+    semester: str = ""
+    entries: tuple[ClassScheduleEntry, ...] = ()
+    total: int = 0
+    week: int | None = None
+
+
+@dataclass(frozen=True)
 class CourseSession:
     """One course teaching session returned by the course query.
 

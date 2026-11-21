@@ -17,6 +17,7 @@ cumt-jwxt grades query
 cumt-jwxt exams query
 cumt-jwxt schedule query
 cumt-jwxt classrooms query --date 2026-11-23
+cumt-jwxt class-schedule query --list --campus nanhu --grade 2023
 cumt-jwxt academic query
 cumt-jwxt courses query --teacher 张三
 ```
@@ -38,6 +39,7 @@ cumt-jwxt courses query --teacher 张三
 - 查询考试安排并生成文本摘要。
 - 查询个人课表，检测课程新增/变更，并生成文本摘要。
 - 按日期和时段查询空闲教室，支持校区、楼号、座位数和可借用筛选。
+- 按校区、年级、学院、专业筛选班级课表，支持 `--list` 列出候选并用 `--class` 查询具体课表或按周过滤。
 - 查询累计学业情况，包括总览 GPA、培养方案学分要求和按课程性质统计。
 - 按课程、教师或场地查询上课情况，支持星期、节次和起始周筛选。
 - 可选保存成绩/考试 JSON、HTML 报告，以及考试 ICS 日历文件。
@@ -95,6 +97,7 @@ uv run cumt-jwxt grades query
 uv run cumt-jwxt exams query
 uv run cumt-jwxt schedule query
 uv run cumt-jwxt classrooms query --date 2026-11-23 --start 08:00 --end 09:40
+uv run cumt-jwxt class-schedule query --list --campus nanhu --grade 2023
 uv run cumt-jwxt academic query
 ```
 
@@ -105,6 +108,7 @@ uv run cumt-jwxt grades query --config ./config.local.json --no-interactive
 uv run cumt-jwxt exams query --config ./config.local.json --no-interactive
 uv run cumt-jwxt schedule query --config ./config.local.json --no-interactive
 uv run cumt-jwxt classrooms query --date 2026-11-23 --config ./config.local.json --no-interactive
+uv run cumt-jwxt class-schedule query --list --campus nanhu --config ./config.local.json --no-interactive
 uv run cumt-jwxt academic query --config ./config.local.json --no-interactive
 ```
 
@@ -196,6 +200,7 @@ uv run ruff check .
 - `src/cumt_jwxt_cli/grades/`：成绩查询、解析、快照、报告
 - `src/cumt_jwxt_cli/exams/`：考试安排查询、解析、报告
 - `src/cumt_jwxt_cli/schedule/`：个人课表查询、解析、报告
+- `src/cumt_jwxt_cli/class_schedule/`：班级课表查询、解析、报告
 - `src/cumt_jwxt_cli/notify/`：邮件通知
 - `tests/`：pytest 测试
 
