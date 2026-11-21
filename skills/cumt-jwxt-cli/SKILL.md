@@ -41,8 +41,10 @@ uv run cumt-jwxt --help
 | `cumt-jwxt classrooms query --date YYYY-MM-DD` | 空闲教室 | 否 |
 | `cumt-jwxt academic query` | 累计学业情况 | 否 |
 | `cumt-jwxt courses query (--course ID \| --teacher NAME \| --room TEXT)` | 全校上课情况，必须带一个标识过滤 | 否 |
+| `cumt-jwxt class-schedule query (--class CODE \| --grade/--college/--major)` | 班级课表，可先 `--list` | 否 |
+| `cumt-jwxt plan query (--plan-id ID \| --grade/--college/--major)` | 专业教学执行计划，可先 `--list` | 否 |
 
-所有查询子命令共享：`--config PATH`、`--no-proxy`、`--no-interactive`、`--verbose`；除 `academic` 外均支持 `--year/--semester`（`classrooms`、`courses` 也支持）。
+所有查询子命令共享：`--config PATH`、`--no-proxy`、`--no-interactive`、`--verbose`；`academic` 与 `plan` 不使用学期参数，其余支持 `--year/--semester`。
 
 常用示例：
 
@@ -52,6 +54,10 @@ uv run cumt-jwxt exams query --save-ics
 uv run cumt-jwxt schedule query --no-interactive
 uv run cumt-jwxt classrooms query --date 2026-11-23 --start 08:00 --end 09:40 --campus nanhu
 uv run cumt-jwxt courses query --room 博1-A203 --limit 20
+uv run cumt-jwxt class-schedule query --list --grade 2023 --college 08 --major 0810
+uv run cumt-jwxt class-schedule query --class 231081001 --week 5
+uv run cumt-jwxt plan query --list --grade 2023 --college 08 --major 0810
+uv run cumt-jwxt plan query --plan-id <ID> --study-year 2023 --study-term 1
 uv run cumt-jwxt academic query
 ```
 
