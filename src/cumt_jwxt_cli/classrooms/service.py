@@ -23,7 +23,12 @@ def run_classroom_query(
     ordered = sorted(fetched.classrooms, key=_sort_key)
     if options.limit > 0:
         ordered = ordered[: options.limit]
-    return ClassroomQueryResult(classrooms=tuple(ordered), total=fetched.total)
+    return ClassroomQueryResult(
+        classrooms=tuple(ordered),
+        total=fetched.total,
+        year=fetched.year,
+        semester=fetched.semester,
+    )
 
 
 def _sort_key(room: FreeClassroom) -> tuple[str, str, tuple[int, object], str]:

@@ -67,6 +67,8 @@ def build_grade_query_result(
         changes=changes,
         details=(),
         state=next_state,
+        year=scope.year,
+        semester=scope.semester,
     )
 
 
@@ -110,6 +112,8 @@ def result_with_details(
         changes=result.changes,
         details=details,
         state=result.state,
+        year=result.year,
+        semester=result.semester,
     )
 
 

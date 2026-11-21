@@ -4,9 +4,9 @@
     "password": ""
   },
   "query": {
-    "year": "2026",
-    "semester": "3",
-    "auto": false
+    "year": null,
+    "semester": null,
+    "auto": true
   },
   "http": {
     "timeout_seconds": 30,

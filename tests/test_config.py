@@ -244,7 +244,7 @@ def test_resolve_config_path_falls_back_to_repo_root(
     assert resolve_config_path(None) == root_config.resolve()
 
 
-def test_load_app_config_auto_derives_scope_when_absent(
+def test_load_app_config_auto_defers_scope_resolution(
     tmp_path,
     monkeypatch,
 ) -> None:
@@ -256,19 +256,21 @@ def test_load_app_config_auto_derives_scope_when_absent(
             "query": {"auto": True},
         },
     )
-    monkeypatch.setattr(
-        "cumt_jwxt_cli.config.resolve_query_scope", lambda: ("2026", "3")
-    )
+
+    def fail_resolve() -> tuple[str, str]:
+        raise AssertionError("config loading must not derive the scope")
+
+    monkeypatch.setattr("cumt_jwxt_cli.time_utils.resolve_query_scope", fail_resolve)
 
     config = load_app_config(_query_args(config=str(config_path)))
 
-    assert config.query.year == "2026"
-    assert config.query.semester == "3"
+    assert config.query.year == ""
+    assert config.query.semester == ""
+    assert config.query.auto is True
 
 
 def test_load_app_config_explicit_scope_wins_over_auto(
     tmp_path,
-    monkeypatch,
 ) -> None:
     config_path = tmp_path / "config.local.json"
     _write_config(
@@ -279,20 +281,15 @@ def test_load_app_config_explicit_scope_wins_over_auto(
         },
     )
 
-    def fail_resolve() -> tuple[str, str]:
-        raise AssertionError("auto derivation must not run when a scope is set")
-
-    monkeypatch.setattr("cumt_jwxt_cli.config.resolve_query_scope", fail_resolve)
-
     config = load_app_config(_query_args(config=str(config_path)))
 
     assert config.query.year == "2024"
     assert config.query.semester == "12"
+    assert config.query.auto is True
 
 
 def test_load_app_config_cli_overrides_auto_derivation(
     tmp_path,
-    monkeypatch,
 ) -> None:
     config_path = tmp_path / "config.local.json"
     _write_config(
@@ -302,11 +299,6 @@ def test_load_app_config_cli_overrides_auto_derivation(
             "query": {"auto": True},
         },
     )
-
-    def fail_resolve() -> tuple[str, str]:
-        raise AssertionError("auto derivation must not run when CLI values are given")
-
-    monkeypatch.setattr("cumt_jwxt_cli.config.resolve_query_scope", fail_resolve)
 
     config = load_app_config(
         _query_args(config=str(config_path), year="2025", semester="3")
@@ -365,13 +357,11 @@ def test_load_app_config_interactive_skips_scope_prompts_with_auto(
 
     monkeypatch.setattr("sys.stdin.isatty", lambda: True)
     monkeypatch.setattr("builtins.input", lambda prompt: next(answers))
-    monkeypatch.setattr(
-        "cumt_jwxt_cli.config.resolve_query_scope", lambda: ("2026", "3")
-    )
 
     config = load_app_config(_query_args(config=str(config_path), no_interactive=False))
 
     assert config.cumt.username == "student"
     assert config.cumt.password == "secret"
-    assert config.query.year == "2026"
-    assert config.query.semester == "3"
+    assert config.query.year == ""
+    assert config.query.semester == ""
+    assert config.query.auto is True

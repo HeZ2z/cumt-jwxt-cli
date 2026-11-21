@@ -135,11 +135,20 @@ class JWXTClient:
         raise QueryError("JWXT request failed after retry attempts.") from last_error
 
 
-def ensure_authenticated_response(response: object, label: str) -> None:
+def ensure_authenticated_response(
+    response: object,
+    label: str,
+    *,
+    html_is_session_expiry: bool = True,
+) -> None:
     """Raise ``SessionExpiredError`` when a response indicates a dead session.
 
     Uses defensive ``getattr`` access so lightweight test doubles and legacy
     response objects without full httpx attributes still work.
+
+    ``html_is_session_expiry`` is false for pages that are expected to return
+    HTML; those callers still fail on the 901/redirect markers JWXT uses for an
+    expired session.
     """
 
     content_type = ""
@@ -154,7 +163,7 @@ def ensure_authenticated_response(response: object, label: str) -> None:
         raise SessionExpiredError(
             f"JWXT {label} request was redirected with HTTP {status_code}."
         )
-    if "text/html" in content_type:
+    if html_is_session_expiry and "text/html" in content_type:
         raise SessionExpiredError(
             f"JWXT {label} response looks like an HTML login page."
         )

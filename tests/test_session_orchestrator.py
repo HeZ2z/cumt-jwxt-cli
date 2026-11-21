@@ -6,6 +6,7 @@ import pytest
 
 import cumt_jwxt_cli.app.session as app_module
 from cumt_jwxt_cli.errors import QueryError, SessionExpiredError
+from cumt_jwxt_cli.models import QueryConfig
 
 
 def _config() -> SimpleNamespace:
@@ -1400,3 +1401,167 @@ def test_query_courses_with_session_reuse_retries_once_after_expiry(
     assert run_calls == 2
     assert login_calls == 1
     assert reset_calls == 1
+
+
+# -- automatic term resolution --------------------------------------------
+
+
+def _auto_config() -> SimpleNamespace:
+    config = _config()
+    config.query = QueryConfig("", "", auto=True)
+    return config
+
+
+def _saved_state() -> SimpleNamespace:
+    return _runtime_state(
+        session_cookies={"JSESSIONID": "saved"},
+        session_updated_at="2026-05-08T12:00:00+08:00",
+    )
+
+
+class _SavedSessionClient:
+    def __init__(self, **kwargs: object) -> None:
+        self.kwargs = kwargs
+
+    def __enter__(self) -> "_SavedSessionClient":
+        return self
+
+    def __exit__(self, *args: object) -> None:
+        return None
+
+    def load_cookies(self, cookies: dict[str, str] | None) -> None:
+        assert cookies == {"JSESSIONID": "saved"}
+
+    def check_reachable(self) -> None:
+        return None
+
+    def export_cookies(self) -> dict[str, str]:
+        return {"JSESSIONID": "saved"}
+
+    def reset_session(self) -> None:
+        return None
+
+
+def _capture_grade_config(monkeypatch, config, previous_state, result):
+    seen: list[SimpleNamespace] = []
+
+    def fake_run_grade_query(resolved_config, client, **kwargs):
+        seen.append(resolved_config)
+        return result
+
+    monkeypatch.setattr(app_module, "load_runtime_state", lambda _cfg: previous_state)
+    monkeypatch.setattr(app_module, "JWXTClient", _SavedSessionClient)
+    monkeypatch.setattr(app_module, "run_grade_query", fake_run_grade_query)
+    return seen
+
+
+def test_auto_scope_passes_resolved_term_to_action(monkeypatch) -> None:
+    config = _auto_config()
+    previous_state = _saved_state()
+    monkeypatch.setattr(
+        app_module, "resolve_current_term", lambda _client: ("2026", "3")
+    )
+    seen = _capture_grade_config(monkeypatch, config, previous_state, _query_result())
+
+    app_module.query_grades_with_session_reuse(
+        config, force_email=False, trust_env=False
+    )
+
+    assert len(seen) == 1
+    assert seen[0].query.year == "2026"
+    assert seen[0].query.semester == "3"
+    assert seen[0].query.auto is True
+
+
+def test_auto_scope_falls_back_to_calendar_when_resolver_returns_none(
+    monkeypatch, caplog
+) -> None:
+    config = _auto_config()
+    previous_state = _saved_state()
+    monkeypatch.setattr(app_module, "resolve_current_term", lambda _client: None)
+    monkeypatch.setattr(app_module, "resolve_query_scope", lambda: ("2025", "12"))
+    seen = _capture_grade_config(monkeypatch, config, previous_state, _query_result())
+
+    with caplog.at_level("WARNING"):
+        app_module.query_grades_with_session_reuse(
+            config, force_email=False, trust_env=False
+        )
+
+    assert seen[0].query.year == "2025"
+    assert seen[0].query.semester == "12"
+    assert "calendar" in caplog.text
+
+
+def test_auto_scope_falls_back_to_calendar_on_query_error(monkeypatch, caplog) -> None:
+    config = _auto_config()
+    previous_state = _saved_state()
+
+    def fail_resolve(_client):
+        raise QueryError("JWXT current term request failed.")
+
+    monkeypatch.setattr(app_module, "resolve_current_term", fail_resolve)
+    monkeypatch.setattr(app_module, "resolve_query_scope", lambda: ("2025", "12"))
+    seen = _capture_grade_config(monkeypatch, config, previous_state, _query_result())
+
+    with caplog.at_level("WARNING"):
+        app_module.query_grades_with_session_reuse(
+            config, force_email=False, trust_env=False
+        )
+
+    assert seen[0].query.year == "2025"
+    assert seen[0].query.semester == "12"
+    assert "Could not read the current JWXT term" in caplog.text
+
+
+def test_auto_scope_relogs_and_retries_resolution_on_session_expiry(
+    monkeypatch,
+) -> None:
+    config = _auto_config()
+    previous_state = _saved_state()
+    login_calls = 0
+    resolver_calls = 0
+
+    def resolve(_client):
+        nonlocal resolver_calls
+        resolver_calls += 1
+        if resolver_calls == 1:
+            raise SessionExpiredError("JWXT current term request was redirected.")
+        return ("2026", "3")
+
+    monkeypatch.setattr(app_module, "resolve_current_term", resolve)
+    monkeypatch.setattr(app_module, "_now_iso", lambda: "2026-05-09T10:00:00+00:00")
+
+    def fake_login(_cfg, _client, **_kwargs) -> None:
+        nonlocal login_calls
+        login_calls += 1
+
+    monkeypatch.setattr(app_module, "_login", fake_login)
+    seen = _capture_grade_config(monkeypatch, config, previous_state, _query_result())
+
+    app_module.query_grades_with_session_reuse(
+        config, force_email=False, trust_env=False
+    )
+
+    assert resolver_calls == 2
+    assert login_calls == 1
+    assert seen[0].query.year == "2026"
+    assert seen[0].query.semester == "3"
+
+
+def test_explicit_scope_skips_term_resolution(monkeypatch) -> None:
+    config = _config()
+    config.query = QueryConfig("2024", "12", auto=True)
+    previous_state = _saved_state()
+
+    def fail_resolve(_client):
+        raise AssertionError("resolver must not run for an explicit scope")
+
+    monkeypatch.setattr(app_module, "resolve_current_term", fail_resolve)
+    seen = _capture_grade_config(monkeypatch, config, previous_state, _query_result())
+
+    app_module.query_grades_with_session_reuse(
+        config, force_email=False, trust_env=False
+    )
+
+    assert seen[0] is config
+    assert seen[0].query.year == "2024"

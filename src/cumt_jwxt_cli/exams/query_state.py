@@ -81,6 +81,8 @@ def build_exam_query_result(
         snapshot=current_snapshot,
         changes=changes,
         state=next_state,
+        year=scope.year,
+        semester=scope.semester,
     )
 
 

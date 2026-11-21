@@ -53,6 +53,8 @@ class ClassroomQueryResult:
 
     classrooms: tuple[FreeClassroom, ...]
     total: int
+    year: str = ""
+    semester: str = ""
 
 
 def parse_date(value: str) -> str:
@@ -124,6 +126,8 @@ def query_classrooms(
     return ClassroomQueryResult(
         classrooms=classrooms,
         total=total if total is not None else len(classrooms),
+        year=config.query.year,
+        semester=config.query.semester,
     )
 
 

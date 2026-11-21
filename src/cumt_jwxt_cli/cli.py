@@ -410,7 +410,7 @@ def _handle_grades_query(args: argparse.Namespace) -> int:
         print(str(exc), file=sys.stderr)
         return int(_exit_code_for(exc))
 
-    scope = grade_query_scope_from_config(config.query.year, config.query.semester)
+    scope = grade_query_scope_from_config(result.year, result.semester)
     scope_state = get_grade_query_state(result.state, scope)
     queried_at = (
         "" if scope_state is None else scope_state.last_successful_query_at or ""
@@ -419,8 +419,8 @@ def _handle_grades_query(args: argparse.Namespace) -> int:
         build_text_summary(
             grades=result.grades,
             changes=result.changes,
-            year=config.query.year,
-            semester=config.query.semester,
+            year=result.year,
+            semester=result.semester,
             queried_at=queried_at,
         )
     )
@@ -446,7 +446,7 @@ def _handle_exams_query(args: argparse.Namespace) -> int:
         print(str(exc), file=sys.stderr)
         return int(_exit_code_for(exc))
 
-    scope = exam_query_scope_from_config(config.query.year, config.query.semester)
+    scope = exam_query_scope_from_config(result.year, result.semester)
     scope_state = get_exam_query_state(result.state, scope)
     queried_at = (
         "" if scope_state is None else scope_state.last_successful_query_at or ""
@@ -455,8 +455,8 @@ def _handle_exams_query(args: argparse.Namespace) -> int:
         build_exam_text_summary(
             exams=result.exams,
             changes=result.changes,
-            year=config.query.year,
-            semester=config.query.semester,
+            year=result.year,
+            semester=result.semester,
             queried_at=queried_at or "",
         )
     )
@@ -482,7 +482,7 @@ def _handle_schedule_query(args: argparse.Namespace) -> int:
         print(str(exc), file=sys.stderr)
         return int(_exit_code_for(exc))
 
-    scope = schedule_query_scope_from_config(config.query.year, config.query.semester)
+    scope = schedule_query_scope_from_config(result.year, result.semester)
     scope_state = get_schedule_query_state(result.state, scope)
     queried_at = (
         "" if scope_state is None else scope_state.last_successful_query_at or ""
@@ -491,8 +491,8 @@ def _handle_schedule_query(args: argparse.Namespace) -> int:
         build_schedule_text_summary(
             lessons=result.lessons,
             changes=result.changes,
-            year=config.query.year,
-            semester=config.query.semester,
+            year=result.year,
+            semester=result.semester,
             queried_at=queried_at or "",
             period_times=result.period_times,
         )
@@ -591,8 +591,8 @@ def _handle_courses_query(args: argparse.Namespace) -> int:
         build_courses_text_summary(
             sessions=result.sessions,
             total=result.total,
-            year=config.query.year,
-            semester=config.query.semester,
+            year=result.year,
+            semester=result.semester,
             course=args.course,
             teacher=args.teacher,
             room=args.room,

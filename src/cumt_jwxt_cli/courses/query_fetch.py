@@ -46,6 +46,8 @@ class CourseQueryResult:
 
     sessions: tuple[CourseSession, ...]
     total: int
+    year: str = ""
+    semester: str = ""
 
 
 def parse_widget_guid(page_html: object) -> str:
@@ -123,6 +125,8 @@ def query_course_sessions(
     return CourseQueryResult(
         sessions=sessions,
         total=total if total is not None else len(sessions),
+        year=config.query.year,
+        semester=config.query.semester,
     )
 
 

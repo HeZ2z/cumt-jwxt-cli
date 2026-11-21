@@ -21,7 +21,6 @@ from cumt_jwxt_cli.models import (
     OutputConfig,
     QueryConfig,
 )
-from cumt_jwxt_cli.time_utils import resolve_query_scope
 
 _ENV_PREFIX = "CUMT_JWXT_"
 _DEFAULT_CONFIG_NAMES = ("config.local.json", "config.json")
@@ -227,10 +226,12 @@ def _build_cumt_config(raw_config: dict[str, Any]) -> CUMTConfig:
 
 
 def _build_query_config(raw_config: dict[str, Any], args: Namespace) -> QueryConfig:
-    """Resolve the query scope as CLI override, configured value, or auto default.
+    """Resolve the query scope from CLI, file, or deferred auto detection.
 
-    `query.auto` only fills in a scope that is entirely absent; per-field explicit
-    values always win so a fixed term can be pinned without disabling auto.
+    When ``query.auto`` is enabled and neither source provides a scope, the
+    configuration keeps ``year``/``semester`` empty so the orchestrator can read
+    the current term from JWXT after login. Calendar derivation only happens as
+    a fallback there, not at config-load time.
     """
 
     auto = _get_bool(raw_config, _PATH_QUERY_AUTO, default=False)
@@ -248,14 +249,14 @@ def _build_query_config(raw_config: dict[str, Any], args: Namespace) -> QueryCon
         else _get_string(raw_config, _PATH_QUERY_SEMESTER, default="")
     )
 
+    if year and semester:
+        return QueryConfig(year=year, semester=semester, auto=auto)
     if not year and not semester and auto:
-        year, semester = resolve_query_scope()
+        return QueryConfig(year="", semester="", auto=True)
 
     if not year:
         raise ConfigError("Missing required configuration: query.year")
-    if not semester:
-        raise ConfigError("Missing required configuration: query.semester")
-    return QueryConfig(year=year, semester=semester)
+    raise ConfigError("Missing required configuration: query.semester")
 
 
 def _build_http_config(raw_config: dict[str, Any]) -> HTTPConfig:
