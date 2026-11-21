@@ -19,6 +19,7 @@ _EXAM_TIME_PATTERN = re.compile(
     r"^(\d{4})-(\d{2})-(\d{2})\((\d{2}):(\d{2})-(\d{2}):(\d{2})\)$"
 )
 
+
 def build_ics_filename(year: str, semester: str) -> str:
     return f"exam_schedule_{short_year_semester(year, semester)}.ics"
 
