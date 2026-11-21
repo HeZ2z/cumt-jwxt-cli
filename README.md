@@ -129,7 +129,7 @@ uv run cumt-jwxt academic query --config ./config.local.json --no-interactive
 }
 ```
 
-敏感字段可以通过环境变量提供，完整配置说明见 wiki。
+敏感字段可以通过环境变量提供，完整配置说明见 [`skills/cumt-jwxt-cli/references/configuration.md`](skills/cumt-jwxt-cli/references/configuration.md)。
 
 ## 查询学期（query）
 
@@ -172,18 +172,12 @@ uv run cumt-jwxt academic query --config ./config.local.json --no-interactive
 
 ## 文档
 
-完整使用文档在项目 wiki：
+完整使用与开发说明放在项目内 agent skill [`skills/cumt-jwxt-cli/SKILL.md`](skills/cumt-jwxt-cli/SKILL.md)：
 
-- [Quick Start](https://github.com/HeZ2z/cumt-jwxt-cli/wiki/Quick-Start)
-- [Configuration](https://github.com/HeZ2z/cumt-jwxt-cli/wiki/Configuration)
-- [Grades Query](https://github.com/HeZ2z/cumt-jwxt-cli/wiki/Grades-Query)
-- [Captcha](https://github.com/HeZ2z/cumt-jwxt-cli/wiki/Captcha)
-- [Email Notification](https://github.com/HeZ2z/cumt-jwxt-cli/wiki/Email-Notification)
-- [Reports and Output](https://github.com/HeZ2z/cumt-jwxt-cli/wiki/Reports-and-Output)
-- [Automation](https://github.com/HeZ2z/cumt-jwxt-cli/wiki/Automation)
-- [Troubleshooting](https://github.com/HeZ2z/cumt-jwxt-cli/wiki/Troubleshooting)
-- [Security and Privacy](https://github.com/HeZ2z/cumt-jwxt-cli/wiki/Security-and-Privacy)
-- [Development](https://github.com/HeZ2z/cumt-jwxt-cli/wiki/Development)
+- [命令参考](skills/cumt-jwxt-cli/references/commands.md)
+- [配置参考](skills/cumt-jwxt-cli/references/configuration.md)
+- [运行、安全与故障排查](skills/cumt-jwxt-cli/references/operations.md)
+- [开发约定](skills/cumt-jwxt-cli/references/development.md)
 
 ## 开发
 
@@ -205,7 +199,7 @@ uv run ruff check .
 - `src/cumt_jwxt_cli/notify/`：邮件通知
 - `tests/`：pytest 测试
 
-更多开发约定见 [Development](https://github.com/HeZ2z/cumt-jwxt-cli/wiki/Development)。
+更多开发约定见 [`skills/cumt-jwxt-cli/references/development.md`](skills/cumt-jwxt-cli/references/development.md)。
 
 ## 安全说明
 
@@ -218,7 +212,7 @@ uv run ruff check .
 - `output/`
 - 账号、密码、API Key、cookie、session、验证码图片或真实教务系统响应
 
-项目默认遵循最小必要保存原则，但本地配置、状态文件、日志、邮件服务商和代理环境仍可能引入额外风险。使用前请阅读 [Security and Privacy](https://github.com/HeZ2z/cumt-jwxt-cli/wiki/Security-and-Privacy)。
+项目默认遵循最小必要保存原则，但本地配置、状态文件、日志、邮件服务商和代理环境仍可能引入额外风险。使用前请阅读 [`skills/cumt-jwxt-cli/references/operations.md`](skills/cumt-jwxt-cli/references/operations.md)。
 
 ## 免责声明
 
