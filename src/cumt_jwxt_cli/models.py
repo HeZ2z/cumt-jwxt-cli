@@ -361,3 +361,55 @@ class ScheduleQueryResult:
     changes: tuple[ScheduleChange, ...]
     state: RuntimeState
     period_times: tuple[PeriodTime, ...] = ()
+
+
+@dataclass(frozen=True)
+class AcademicOverview:
+    """Cumulative academic overview parsed from the student status page.
+
+    Values stay as display strings (like :class:`CourseGrade`) so the report
+    layer decides formatting; ``None`` means the field was absent.
+    """
+
+    snapshot_at: str | None
+    gpa_all: str | None
+    gpa_degree: str | None
+    plan_total: str | None
+    plan_passed: str | None
+    plan_failed: str | None
+    plan_unlearned: str | None
+    plan_in_progress: str | None
+    out_of_plan_passed: str | None
+    out_of_plan_failed: str | None
+
+
+@dataclass(frozen=True)
+class PlanRequirementNode:
+    """One node of the training plan requirement tree."""
+
+    node_id: str
+    name: str | None
+    parent_id: str | None
+    required_credits: str | None
+    earned_credits: str | None
+    is_passed: bool | None
+
+
+@dataclass(frozen=True)
+class CoursePropertyStat:
+    """Per course-property GPA and weighted-average statistic."""
+
+    property_code: str | None
+    property_name: str | None
+    gpa: str | None
+    weighted_average: str | None
+    earned_credits: str | None
+
+
+@dataclass(frozen=True)
+class AcademicSummaryResult:
+    """Pure business result for a completed academic query workflow."""
+
+    overview: AcademicOverview
+    plan_nodes: tuple[PlanRequirementNode, ...]
+    property_stats: tuple[CoursePropertyStat, ...]

@@ -1152,3 +1152,125 @@ def test_query_classrooms_with_session_reuse_retries_once_after_expiry(
     assert run_calls == 2
     assert login_calls == 1
     assert reset_calls == 1
+
+
+def test_query_academic_with_session_reuse_reuses_saved_cookies(
+    monkeypatch,
+) -> None:
+    previous_state = _runtime_state(
+        session_cookies={"JSESSIONID": "saved"},
+        session_updated_at="2026-05-08T12:00:00+08:00",
+    )
+    login_calls = 0
+    run_calls: list[tuple[object, object]] = []
+    client_events: list[str] = []
+
+    class FakeClient:
+        def __init__(self, **kwargs: object) -> None:
+            self.kwargs = kwargs
+
+        def __enter__(self) -> "FakeClient":
+            return self
+
+        def __exit__(self, *args: object) -> None:
+            return None
+
+        def load_cookies(self, cookies: dict[str, str] | None) -> None:
+            client_events.append("load_cookies")
+            assert cookies == {"JSESSIONID": "saved"}
+
+        def check_reachable(self) -> None:
+            client_events.append("check_reachable")
+
+        def export_cookies(self) -> dict[str, str]:
+            raise AssertionError("academic query should not export cookies")
+
+        def reset_session(self) -> None:
+            raise AssertionError("reset_session should not be needed")
+
+    expected = SimpleNamespace(overview=SimpleNamespace())
+
+    monkeypatch.setattr(app_module, "load_runtime_state", lambda config: previous_state)
+    monkeypatch.setattr(app_module, "JWXTClient", FakeClient)
+
+    def fake_login(config, client, **_kwargs) -> None:
+        nonlocal login_calls
+        login_calls += 1
+
+    def fake_run_academic(config: object, client: object) -> SimpleNamespace:
+        run_calls.append((config, client))
+        return expected
+
+    monkeypatch.setattr(app_module, "_login", fake_login)
+    monkeypatch.setattr(app_module, "run_academic_query", fake_run_academic)
+
+    result = app_module.query_academic_with_session_reuse(_config(), trust_env=False)
+
+    assert result is expected
+    assert login_calls == 0
+    assert len(run_calls) == 1
+    assert client_events == ["load_cookies", "check_reachable"]
+
+
+def test_query_academic_with_session_reuse_retries_once_after_session_expiry(
+    monkeypatch,
+) -> None:
+    previous_state = _runtime_state(
+        session_cookies={"JSESSIONID": "saved"},
+        session_updated_at="2026-05-08T12:00:00+08:00",
+    )
+    login_calls = 0
+    run_calls = 0
+    reset_calls = 0
+
+    class FakeClient:
+        def __init__(self, **kwargs: object) -> None:
+            self.kwargs = kwargs
+
+        def __enter__(self) -> "FakeClient":
+            return self
+
+        def __exit__(self, *args: object) -> None:
+            return None
+
+        def load_cookies(self, cookies: dict[str, str] | None) -> None:
+            assert cookies == {"JSESSIONID": "saved"}
+
+        def check_reachable(self) -> None:
+            return None
+
+        def export_cookies(self) -> dict[str, str]:
+            raise AssertionError("academic query should not export cookies")
+
+        def reset_session(self) -> None:
+            nonlocal reset_calls
+            reset_calls += 1
+
+    expected = SimpleNamespace(overview=SimpleNamespace())
+
+    monkeypatch.setattr(app_module, "load_runtime_state", lambda config: previous_state)
+    monkeypatch.setattr(app_module, "JWXTClient", FakeClient)
+    monkeypatch.setattr(app_module, "_now_iso", lambda: "2026-05-09T10:00:00+00:00")
+
+    def fake_login(config, client, **_kwargs) -> None:
+        nonlocal login_calls
+        login_calls += 1
+
+    def fake_run_academic(config: object, client: object) -> SimpleNamespace:
+        nonlocal run_calls
+        run_calls += 1
+        if run_calls == 1:
+            raise SessionExpiredError(
+                "JWXT academic status request failed with HTTP 901."
+            )
+        return expected
+
+    monkeypatch.setattr(app_module, "_login", fake_login)
+    monkeypatch.setattr(app_module, "run_academic_query", fake_run_academic)
+
+    result = app_module.query_academic_with_session_reuse(_config(), trust_env=False)
+
+    assert result is expected
+    assert run_calls == 2
+    assert login_calls == 1
+    assert reset_calls == 1
