@@ -24,7 +24,7 @@ dist/
 # Local config and runtime state
 config.local.json
 config.json
-state.json
+state.json*
 *.log
 
 # Editor and agent runtime dirs
