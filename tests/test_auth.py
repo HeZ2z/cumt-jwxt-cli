@@ -24,10 +24,18 @@ from cumt_jwxt_cli.models import (
 
 
 class _Response:
-    def __init__(self, *, text: str = "", content: bytes = b"", status_code: int = 200):
+    def __init__(
+        self,
+        *,
+        text: str = "",
+        content: bytes = b"",
+        status_code: int = 200,
+        headers: dict[str, str] | None = None,
+    ):
         self.text = text
         self.content = content
         self.status_code = status_code
+        self.headers = headers or {}
 
     def json(self) -> object:
         return json.loads(self.text)
@@ -142,7 +150,7 @@ def test_login_skips_password_encryption_when_disabled() -> None:
 def test_login_rejects_failed_status() -> None:
     class FailedClient(_Client):
         def post(self, path: str, *, data: dict[str, str]) -> _Response:
-            return _Response(text="验证码错误")
+            return _Response(text='<input name="yhm"><input name="yzm">')
 
     with pytest.raises(AuthError, match="after multiple attempts"):
         login(_config(), FailedClient(), recognize_captcha=lambda image, config: "1234")
@@ -152,11 +160,108 @@ def test_login_accepts_redirect_after_successful_post() -> None:
     class RedirectClient(_Client):
         def post(self, path: str, *, data: dict[str, str]) -> _Response:
             self.posts.append((path, data))
-            return _Response(status_code=302)
+            return _Response(
+                status_code=302,
+                headers={"Location": "/xtgl/index_initMenu.html"},
+            )
 
     login(
         _config(),
         RedirectClient(),
+        recognize_captcha=lambda image, config: "1234",
+    )
+
+
+def test_login_accepts_login_redirect_that_resolves_to_menu() -> None:
+    """Some deployments land on login_slogin, which then redirects to the menu."""
+
+    class ChainedClient(_Client):
+        def __init__(self) -> None:
+            super().__init__()
+            self.posted = False
+            self.followed_paths: list[str] = []
+
+        def get(self, path: str) -> _Response:
+            if self.posted and "login_slogin" in path:
+                self.followed_paths.append(path)
+                return _Response(
+                    status_code=302,
+                    headers={"Location": "/xtgl/index_initMenu.html"},
+                )
+            return super().get(path)
+
+        def post(self, path: str, *, data: dict[str, str]) -> _Response:
+            self.posts.append((path, data))
+            self.posted = True
+            return _Response(
+                status_code=302,
+                headers={
+                    "Location": "http://jwxt.cumt.edu.cn/jwglxt/xtgl/login_slogin.html?time=1"
+                },
+            )
+
+    client = ChainedClient()
+
+    login(_config(), client, recognize_captcha=lambda image, config: "1234")
+
+    assert len(client.posts) == 1
+    assert client.followed_paths == [
+        "http://jwxt.cumt.edu.cn/jwglxt/xtgl/login_slogin.html?time=1"
+    ]
+
+
+def test_login_rejects_redirect_back_to_login_page() -> None:
+    class RedirectClient(_Client):
+        def post(self, path: str, *, data: dict[str, str]) -> _Response:
+            self.posts.append((path, data))
+            return _Response(
+                status_code=302,
+                headers={"Location": "/xtgl/login_slogin.html"},
+            )
+
+    with pytest.raises(AuthError, match="after multiple attempts"):
+        login(
+            _config(),
+            RedirectClient(),
+            recognize_captcha=lambda image, config: "1234",
+        )
+
+
+def test_login_rejects_redirect_without_location() -> None:
+    class RedirectClient(_Client):
+        def post(self, path: str, *, data: dict[str, str]) -> _Response:
+            self.posts.append((path, data))
+            return _Response(status_code=302)
+
+    with pytest.raises(AuthError, match="after multiple attempts"):
+        login(
+            _config(),
+            RedirectClient(),
+            recognize_captcha=lambda image, config: "1234",
+        )
+
+
+def test_login_rejects_200_response_with_login_form() -> None:
+    class LoginPageClient(_Client):
+        def post(self, path: str, *, data: dict[str, str]) -> _Response:
+            return _Response(text='<input name="csrftoken" value="TOKEN">')
+
+    with pytest.raises(AuthError, match="after multiple attempts"):
+        login(
+            _config(),
+            LoginPageClient(),
+            recognize_captcha=lambda image, config: "1234",
+        )
+
+
+def test_login_accepts_200_response_without_login_form() -> None:
+    class HomePageClient(_Client):
+        def post(self, path: str, *, data: dict[str, str]) -> _Response:
+            return _Response(text="<html>欢迎使用</html>")
+
+    login(
+        _config(),
+        HomePageClient(),
         recognize_captcha=lambda image, config: "1234",
     )
 
@@ -171,8 +276,11 @@ def test_login_retries_on_failed_captcha_then_succeeds() -> None:
             self.posts.append((path, data))
             self.post_count += 1
             if self.post_count == 1:
-                return _Response(text="验证码错误")
-            return _Response(status_code=302)
+                return _Response(text='<input name="yzm">')
+            return _Response(
+                status_code=302,
+                headers={"Location": "/xtgl/index_initMenu.html"},
+            )
 
     client = RetryThenSucceedClient()
 
