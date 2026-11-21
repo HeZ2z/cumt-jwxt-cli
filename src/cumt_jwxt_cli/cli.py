@@ -37,6 +37,7 @@ from cumt_jwxt_cli.schedule.query_state import (
     schedule_query_scope_from_config,
 )
 from cumt_jwxt_cli.schedule.report import build_schedule_text_summary
+from cumt_jwxt_cli.state import state_lock
 
 _USAGE_PREFIX = "用法: "
 _HELP_FLAG_HELP = "显示帮助信息并退出。"
@@ -305,12 +306,13 @@ def _handle_grades_query(args: argparse.Namespace) -> int:
             retention_days=config.logging.retention_days,
             verbose=args.verbose,
         )
-        result = query_grades_with_session_reuse(
-            config,
-            force_email=args.force_email,
-            trust_env=not args.no_proxy,
-            allow_manual_captcha=not args.no_interactive,
-        )
+        with state_lock(config):
+            result = query_grades_with_session_reuse(
+                config,
+                force_email=args.force_email,
+                trust_env=not args.no_proxy,
+                allow_manual_captcha=not args.no_interactive,
+            )
     except ConfigError as exc:
         print(str(exc), file=sys.stderr)
         return int(ExitCode.CONFIG_ERROR)
@@ -355,12 +357,13 @@ def _handle_exams_query(args: argparse.Namespace) -> int:
             retention_days=config.logging.retention_days,
             verbose=args.verbose,
         )
-        result = query_exams_with_session_reuse(
-            config,
-            force_email=args.force_email,
-            trust_env=not args.no_proxy,
-            allow_manual_captcha=not args.no_interactive,
-        )
+        with state_lock(config):
+            result = query_exams_with_session_reuse(
+                config,
+                force_email=args.force_email,
+                trust_env=not args.no_proxy,
+                allow_manual_captcha=not args.no_interactive,
+            )
     except ConfigError as exc:
         print(str(exc), file=sys.stderr)
         return int(ExitCode.CONFIG_ERROR)
@@ -405,12 +408,13 @@ def _handle_schedule_query(args: argparse.Namespace) -> int:
             retention_days=config.logging.retention_days,
             verbose=args.verbose,
         )
-        result = query_schedule_with_session_reuse(
-            config,
-            force_email=args.force_email,
-            trust_env=not args.no_proxy,
-            allow_manual_captcha=not args.no_interactive,
-        )
+        with state_lock(config):
+            result = query_schedule_with_session_reuse(
+                config,
+                force_email=args.force_email,
+                trust_env=not args.no_proxy,
+                allow_manual_captcha=not args.no_interactive,
+            )
     except ConfigError as exc:
         print(str(exc), file=sys.stderr)
         return int(ExitCode.CONFIG_ERROR)

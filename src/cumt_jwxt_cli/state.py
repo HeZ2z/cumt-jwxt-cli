@@ -3,8 +3,11 @@
 from __future__ import annotations
 
 import json
+import os
+from collections.abc import Iterator
+from contextlib import contextmanager
 from pathlib import Path
-from typing import Any
+from typing import IO, Any
 
 from cumt_jwxt_cli.errors import StateError
 from cumt_jwxt_cli.models import (
@@ -86,7 +89,7 @@ def save_runtime_state(config: AppConfig, state: RuntimeState) -> None:
     state_path = _state_path(config)
     payload = _serialize_runtime_state(state)
     state_path.parent.mkdir(parents=True, exist_ok=True)
-    temp_path = state_path.with_name(f"{state_path.name}.tmp")
+    temp_path = state_path.with_name(f"{state_path.name}.{os.getpid()}.tmp")
 
     try:
         with temp_path.open("w", encoding="utf-8") as file:
@@ -95,6 +98,57 @@ def save_runtime_state(config: AppConfig, state: RuntimeState) -> None:
         temp_path.replace(state_path)
     except OSError as exc:
         raise StateError(f"Unable to write state file: {state_path}") from exc
+
+
+@contextmanager
+def state_lock(config: AppConfig) -> Iterator[None]:
+    """Stop overlapping runs from overwriting each other's state.
+
+    The lock spans the whole query: state is read before the network request and
+    saved after it, so locking only the write would still lose updates.
+    """
+
+    state_path = _state_path(config)
+    lock_path = state_path.with_name(f"{state_path.name}.lock")
+    lock_path.parent.mkdir(parents=True, exist_ok=True)
+    with lock_path.open("a+b") as lock_file:
+        try:
+            _lock_file(lock_file)
+        except OSError as exc:
+            raise StateError(
+                "Another cumt-jwxt run is already using this state file; "
+                "retry after it finishes."
+            ) from exc
+        try:
+            yield
+        finally:
+            _unlock_file(lock_file)
+
+
+def _lock_file(file: IO[bytes]) -> None:
+    if os.name == "nt":
+        import msvcrt
+
+        file.seek(0)
+        msvcrt.locking(file.fileno(), msvcrt.LK_NBLCK, 1)
+        return
+
+    import fcntl
+
+    fcntl.flock(file.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+
+
+def _unlock_file(file: IO[bytes]) -> None:
+    if os.name == "nt":
+        import msvcrt
+
+        file.seek(0)
+        msvcrt.locking(file.fileno(), msvcrt.LK_UNLCK, 1)
+        return
+
+    import fcntl
+
+    fcntl.flock(file.fileno(), fcntl.LOCK_UN)
 
 
 def _state_path(config: AppConfig) -> Path:
