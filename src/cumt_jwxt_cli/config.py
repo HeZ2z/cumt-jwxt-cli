@@ -93,7 +93,11 @@ def resolve_config_path(config_arg: str | None) -> Path:
     if config_arg:
         return Path(config_arg).expanduser().resolve()
 
-    search_dirs = (Path.cwd(), Path(__file__).resolve().parents[3])
+    # The repository-root fallback only works for a source checkout: it assumes
+    # src/cumt_jwxt_cli/config.py layout. When installed from a wheel there is no
+    # checkout to look in, so rely on cwd or an explicit --config.
+    project_root = Path(__file__).resolve().parents[2]
+    search_dirs = (Path.cwd(), project_root)
     for directory in search_dirs:
         for filename in _DEFAULT_CONFIG_NAMES:
             candidate = directory / filename
