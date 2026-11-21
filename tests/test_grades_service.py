@@ -7,7 +7,13 @@ from pathlib import Path
 import pytest
 
 import cumt_jwxt_cli.grades.service as service_module
-from cumt_jwxt_cli.errors import NotifyError, SnapshotError, StateError
+from cumt_jwxt_cli.errors import (
+    NotifyError,
+    QueryError,
+    SessionExpiredError,
+    SnapshotError,
+    StateError,
+)
 from cumt_jwxt_cli.grades.service import (
     build_grade_query_result,
     is_session_query_failure,
@@ -574,9 +580,7 @@ def test_run_grade_query_fetches_details_for_all_courses_on_change(tmp_path) -> 
 def test_run_grade_query_email_keeps_grade_composition_for_unchanged_course(
     tmp_path,
 ) -> None:
-    config = _app_config(
-        tmp_path / "config.local.json", notify_enabled=True
-    )
+    config = _app_config(tmp_path / "config.local.json", notify_enabled=True)
     client = _QueryClient(
         {
             "items": [
@@ -957,27 +961,17 @@ def test_run_grade_query_does_not_update_state_when_notify_fails(tmp_path) -> No
 
 def test_is_session_query_failure_matches_known_session_markers() -> None:
     assert is_session_query_failure(
-        __import__("cumt_jwxt_cli.errors").errors.QueryError(
-            "JWXT grade list request failed with HTTP 901."
-        )
+        SessionExpiredError("JWXT grade list request failed with HTTP 901.")
     )
     assert is_session_query_failure(
-        __import__("cumt_jwxt_cli.errors").errors.QueryError(
-            "JWXT grade list request was redirected with HTTP 302."
-        )
+        SessionExpiredError("JWXT grade list request was redirected with HTTP 302.")
     )
     assert is_session_query_failure(
-        __import__("cumt_jwxt_cli.errors").errors.QueryError(
-            "JWXT grade list response looks like an HTML login page."
-        )
+        SessionExpiredError("JWXT grade list response looks like an HTML login page.")
     )
     assert not is_session_query_failure(
-        __import__("cumt_jwxt_cli.errors").errors.QueryError(
-            "JWXT grade list response is not valid JSON."
-        )
+        QueryError("JWXT grade list response is not valid JSON.")
     )
     assert not is_session_query_failure(
-        __import__("cumt_jwxt_cli.errors").errors.QueryError(
-            "JWXT request failed after retry attempts."
-        )
+        QueryError("JWXT request failed after retry attempts.")
     )

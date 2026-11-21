@@ -35,6 +35,13 @@ class QueryError(CUMTJWXTError):
     """Raised when JWXT grade queries fail."""
 
 
+class SessionExpiredError(QueryError):
+    """Raised when the JWXT login session is no longer valid.
+
+    Callers may safely log in again once and retry the query.
+    """
+
+
 class ParseError(CUMTJWXTError):
     """Raised when external grade data cannot be parsed safely."""
 

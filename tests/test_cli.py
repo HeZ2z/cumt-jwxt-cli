@@ -1,6 +1,7 @@
 """CLI parser tests."""
 
 import json
+from collections.abc import Callable
 from types import SimpleNamespace
 
 import pytest
@@ -178,7 +179,9 @@ def test_main_runs_grades_query_workflow(capsys, tmp_path, monkeypatch) -> None:
     monkeypatch.setattr(
         cli_module,
         "query_grades_with_session_reuse",
-        lambda config, *, force_email, trust_env: _empty_query_result(),
+        lambda config, *, force_email, trust_env, allow_manual_captcha: (
+            _empty_query_result()
+        ),
     )
 
     exit_code = main(["grades", "query", "--config", str(config_path)])
@@ -210,6 +213,7 @@ def test_main_uses_proxy_by_default(capsys, tmp_path, monkeypatch) -> None:
         *,
         force_email: bool,
         trust_env: bool,
+        allow_manual_captcha: bool,
     ) -> SimpleNamespace:
         orchestrator_calls.append(
             {
@@ -259,6 +263,7 @@ def test_main_disables_proxy_when_no_proxy_flag_is_set(
         *,
         force_email: bool,
         trust_env: bool,
+        allow_manual_captcha: bool,
     ) -> SimpleNamespace:
         orchestrator_calls.append(
             {
@@ -317,6 +322,7 @@ def test_main_maps_runtime_errors_to_exit_codes(
         *,
         force_email: bool,
         trust_env: bool,
+        allow_manual_captcha: bool,
     ) -> None:
         raise raised
 
@@ -410,7 +416,9 @@ def test_main_runs_exams_query_workflow(capsys, tmp_path, monkeypatch) -> None:
     monkeypatch.setattr(
         cli_module,
         "query_exams_with_session_reuse",
-        lambda config, *, force_email, trust_env: _empty_exam_query_result(),
+        lambda config, *, force_email, trust_env, allow_manual_captcha: (
+            _empty_exam_query_result()
+        ),
     )
 
     exit_code = main(["exams", "query", "--config", str(config_path)])
@@ -442,6 +450,7 @@ def test_exams_query_no_proxy(capsys, tmp_path, monkeypatch) -> None:
         *,
         force_email: bool,
         trust_env: bool,
+        allow_manual_captcha: bool,
     ) -> SimpleNamespace:
         calls.append({"force_email": force_email, "trust_env": trust_env})
         return _empty_exam_query_result()
@@ -493,6 +502,7 @@ def test_exams_query_maps_runtime_errors_to_exit_codes(
         *,
         force_email: bool,
         trust_env: bool,
+        allow_manual_captcha: bool,
     ) -> None:
         raise raised
 
@@ -586,7 +596,9 @@ def test_main_runs_schedule_query_workflow(capsys, tmp_path, monkeypatch) -> Non
     monkeypatch.setattr(
         cli_module,
         "query_schedule_with_session_reuse",
-        lambda config, *, force_email, trust_env: _empty_schedule_query_result(),
+        lambda config, *, force_email, trust_env, allow_manual_captcha: (
+            _empty_schedule_query_result()
+        ),
     )
 
     exit_code = main(["schedule", "query", "--config", str(config_path)])
@@ -650,7 +662,7 @@ def test_main_schedule_query_includes_clock_times(
     monkeypatch.setattr(
         cli_module,
         "query_schedule_with_session_reuse",
-        lambda config, *, force_email, trust_env: result,
+        lambda config, *, force_email, trust_env, allow_manual_captcha: result,
     )
 
     exit_code = main(["schedule", "query", "--config", str(config_path)])
@@ -681,6 +693,7 @@ def test_schedule_query_no_proxy(capsys, tmp_path, monkeypatch) -> None:
         *,
         force_email: bool,
         trust_env: bool,
+        allow_manual_captcha: bool,
     ) -> SimpleNamespace:
         calls.append({"force_email": force_email, "trust_env": trust_env})
         return _empty_schedule_query_result()
@@ -694,6 +707,64 @@ def test_schedule_query_no_proxy(capsys, tmp_path, monkeypatch) -> None:
     main(["schedule", "query", "--config", str(config_path), "--no-proxy"])
 
     assert calls == [{"force_email": False, "trust_env": False}]
+
+
+@pytest.mark.parametrize(
+    ("argv", "orchestration_name", "empty_result"),
+    [
+        (["grades", "query"], "query_grades_with_session_reuse", _empty_query_result),
+        (
+            ["exams", "query"],
+            "query_exams_with_session_reuse",
+            _empty_exam_query_result,
+        ),
+        (
+            ["schedule", "query"],
+            "query_schedule_with_session_reuse",
+            _empty_schedule_query_result,
+        ),
+    ],
+)
+def test_main_disables_manual_captcha_when_no_interactive(
+    capsys,
+    tmp_path,
+    monkeypatch,
+    argv: list[str],
+    orchestration_name: str,
+    empty_result: Callable[[], SimpleNamespace],
+) -> None:
+    config_path = tmp_path / "config.local.json"
+    config_path.write_text(
+        json.dumps(
+            {
+                "cumt": {"username": "student", "password": "secret"},
+                "query": {"year": "2025", "semester": "12"},
+            }
+        ),
+        encoding="utf-8",
+    )
+    calls: list[bool] = []
+
+    monkeypatch.setattr(cli_module, "configure_logging", lambda **kwargs: None)
+
+    def fake_query(
+        config: object,
+        *,
+        force_email: bool,
+        trust_env: bool,
+        allow_manual_captcha: bool,
+    ) -> SimpleNamespace:
+        calls.append(allow_manual_captcha)
+        return empty_result()
+
+    monkeypatch.setattr(cli_module, orchestration_name, fake_query)
+
+    exit_code = main([*argv, "--config", str(config_path), "--no-interactive"])
+    captured = capsys.readouterr()
+
+    assert exit_code == int(ExitCode.OK)
+    assert captured.err == ""
+    assert calls == [False]
 
 
 @pytest.mark.parametrize(
@@ -732,6 +803,7 @@ def test_schedule_query_maps_runtime_errors_to_exit_codes(
         *,
         force_email: bool,
         trust_env: bool,
+        allow_manual_captcha: bool,
     ) -> None:
         raise raised
 

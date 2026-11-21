@@ -425,7 +425,7 @@ def test_run_schedule_query_degrades_when_period_times_fail(tmp_path: Path) -> N
 
 
 def test_is_session_query_failure_re_export() -> None:
-    from cumt_jwxt_cli.errors import QueryError
+    from cumt_jwxt_cli.errors import QueryError, SessionExpiredError
 
-    assert is_session_query_failure(QueryError("failed with HTTP 901")) is True
+    assert is_session_query_failure(SessionExpiredError("failed with HTTP 901")) is True
     assert is_session_query_failure(QueryError("not valid JSON")) is False

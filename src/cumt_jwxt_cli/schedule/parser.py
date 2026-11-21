@@ -15,7 +15,7 @@ from cumt_jwxt_cli.models import (
     ScheduleUnscheduledCourse,
 )
 
-_WEEK_PART_PATTERN = re.compile(r"^(\d+)(?:-(\d+))?周(?:\((单|双)\))?$")
+_WEEK_PART_PATTERN = re.compile(r"^第?(\d+)(?:-(\d+))?周(?:\((单|双)\))?$")
 # JWXT separates the two dates with an ASCII tilde in some semesters and the
 # Chinese character 至 (U+81F3) in others, so match the dates themselves.
 _WEEK_DATE_PATTERN = re.compile(r"\d{4}-\d{2}-\d{2}")

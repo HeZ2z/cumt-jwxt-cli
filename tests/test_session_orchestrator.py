@@ -5,7 +5,7 @@ from types import SimpleNamespace
 import pytest
 
 import cumt_jwxt_cli.app.session as app_module
-from cumt_jwxt_cli.errors import QueryError
+from cumt_jwxt_cli.errors import QueryError, SessionExpiredError
 
 
 def _config() -> SimpleNamespace:
@@ -98,7 +98,7 @@ def test_query_grades_with_session_reuse_reuses_saved_cookies_without_login(
     monkeypatch.setattr(app_module, "load_runtime_state", lambda config: previous_state)
     monkeypatch.setattr(app_module, "JWXTClient", FakeClient)
 
-    def fake_login(config, client) -> None:
+    def fake_login(config, client, **_kwargs) -> None:
         nonlocal login_calls
         login_calls += 1
 
@@ -180,7 +180,7 @@ def test_query_grades_with_session_reuse_logs_in_when_no_saved_cookies(
     monkeypatch.setattr(app_module, "JWXTClient", FakeClient)
     monkeypatch.setattr(app_module, "_now_iso", lambda: session_updated_at)
 
-    def fake_login(config, client) -> None:
+    def fake_login(config, client, **_kwargs) -> None:
         nonlocal login_calls
         login_calls += 1
 
@@ -254,14 +254,14 @@ def test_query_grades_with_session_reuse_retries_once_after_session_expiry(
     monkeypatch.setattr(app_module, "JWXTClient", FakeClient)
     monkeypatch.setattr(app_module, "_now_iso", lambda: "2026-05-09T10:00:00+00:00")
 
-    def fake_login(config, client) -> None:
+    def fake_login(config, client, **_kwargs) -> None:
         nonlocal login_calls
         login_calls += 1
 
     def fake_run_grade_query(*args: object, **kwargs: object) -> SimpleNamespace:
         run_calls.append(kwargs)
         if len(run_calls) == 1:
-            raise QueryError("JWXT grade list request failed with HTTP 901.")
+            raise SessionExpiredError("JWXT grade list request failed with HTTP 901.")
         return _query_result()
 
     monkeypatch.setattr(app_module, "_login", fake_login)
@@ -333,14 +333,16 @@ def test_query_grades_with_session_reuse_retries_once_after_redirect_response(
     monkeypatch.setattr(app_module, "JWXTClient", FakeClient)
     monkeypatch.setattr(app_module, "_now_iso", lambda: "2026-05-09T10:00:00+00:00")
 
-    def fake_login(config, client) -> None:
+    def fake_login(config, client, **_kwargs) -> None:
         nonlocal login_calls
         login_calls += 1
 
     def fake_run_grade_query(*args: object, **kwargs: object) -> SimpleNamespace:
         run_calls.append(kwargs)
         if len(run_calls) == 1:
-            raise QueryError("JWXT grade list request was redirected with HTTP 302.")
+            raise SessionExpiredError(
+                "JWXT grade list request was redirected with HTTP 302."
+            )
         return _query_result()
 
     monkeypatch.setattr(app_module, "_login", fake_login)
@@ -409,7 +411,7 @@ def test_query_grades_with_session_reuse_does_not_retry_non_session_error(
     monkeypatch.setattr(app_module, "load_runtime_state", lambda config: previous_state)
     monkeypatch.setattr(app_module, "JWXTClient", FakeClient)
 
-    def fake_login(config, client) -> None:
+    def fake_login(config, client, **_kwargs) -> None:
         nonlocal login_calls
         login_calls += 1
 
@@ -467,7 +469,7 @@ def test_query_exams_with_session_reuse_logs_in_when_no_saved_cookies(
     monkeypatch.setattr(app_module, "JWXTClient", FakeClient)
     monkeypatch.setattr(app_module, "_now_iso", lambda: session_updated_at)
 
-    def fake_login(_cfg, _client) -> None:
+    def fake_login(_cfg, _client, **_kwargs) -> None:
         nonlocal login_calls
         login_calls += 1
 
@@ -532,7 +534,7 @@ def test_query_exams_with_session_reuse_reuses_saved_cookies_without_login(
     monkeypatch.setattr(app_module, "load_runtime_state", lambda _cfg: previous_state)
     monkeypatch.setattr(app_module, "JWXTClient", FakeClient)
 
-    def fake_login(_cfg, _client) -> None:
+    def fake_login(_cfg, _client, **_kwargs) -> None:
         nonlocal login_calls
         login_calls += 1
 
@@ -600,14 +602,14 @@ def test_query_exams_with_session_reuse_retries_once_after_session_expiry(
     monkeypatch.setattr(app_module, "JWXTClient", FakeClient)
     monkeypatch.setattr(app_module, "_now_iso", lambda: "2026-05-09T10:00:00+00:00")
 
-    def fake_login(_cfg, _client) -> None:
+    def fake_login(_cfg, _client, **_kwargs) -> None:
         nonlocal login_calls
         login_calls += 1
 
     def fake_run_exam_query(*args: object, **kwargs: object) -> SimpleNamespace:
         run_calls.append(kwargs)
         if len(run_calls) == 1:
-            raise QueryError("JWXT exam list request failed with HTTP 901.")
+            raise SessionExpiredError("JWXT exam list request failed with HTTP 901.")
         return _exam_query_result()
 
     monkeypatch.setattr(app_module, "_login", fake_login)
@@ -663,7 +665,7 @@ def test_query_exams_with_session_reuse_does_not_retry_non_session_error(
     monkeypatch.setattr(app_module, "load_runtime_state", lambda _cfg: previous_state)
     monkeypatch.setattr(app_module, "JWXTClient", FakeClient)
 
-    def fake_login(_cfg, _client) -> None:
+    def fake_login(_cfg, _client, **_kwargs) -> None:
         nonlocal login_calls
         login_calls += 1
 
@@ -721,7 +723,7 @@ def test_query_schedule_with_session_reuse_logs_in_when_no_saved_cookies(
     monkeypatch.setattr(app_module, "JWXTClient", FakeClient)
     monkeypatch.setattr(app_module, "_now_iso", lambda: session_updated_at)
 
-    def fake_login(_cfg, _client) -> None:
+    def fake_login(_cfg, _client, **_kwargs) -> None:
         nonlocal login_calls
         login_calls += 1
 
@@ -786,7 +788,7 @@ def test_query_schedule_with_session_reuse_reuses_saved_cookies_without_login(
     monkeypatch.setattr(app_module, "load_runtime_state", lambda _cfg: previous_state)
     monkeypatch.setattr(app_module, "JWXTClient", FakeClient)
 
-    def fake_login(_cfg, _client) -> None:
+    def fake_login(_cfg, _client, **_kwargs) -> None:
         nonlocal login_calls
         login_calls += 1
 
@@ -854,14 +856,16 @@ def test_query_schedule_with_session_reuse_retries_once_after_session_expiry(
     monkeypatch.setattr(app_module, "JWXTClient", FakeClient)
     monkeypatch.setattr(app_module, "_now_iso", lambda: "2026-05-09T10:00:00+00:00")
 
-    def fake_login(_cfg, _client) -> None:
+    def fake_login(_cfg, _client, **_kwargs) -> None:
         nonlocal login_calls
         login_calls += 1
 
     def fake_run_schedule_query(*args: object, **kwargs: object) -> SimpleNamespace:
         run_calls.append(kwargs)
         if len(run_calls) == 1:
-            raise QueryError("JWXT schedule list request failed with HTTP 901.")
+            raise SessionExpiredError(
+                "JWXT schedule list request failed with HTTP 901."
+            )
         return _schedule_query_result()
 
     monkeypatch.setattr(app_module, "_login", fake_login)
@@ -917,7 +921,7 @@ def test_query_schedule_with_session_reuse_does_not_retry_non_session_error(
     monkeypatch.setattr(app_module, "load_runtime_state", lambda _cfg: previous_state)
     monkeypatch.setattr(app_module, "JWXTClient", FakeClient)
 
-    def fake_login(_cfg, _client) -> None:
+    def fake_login(_cfg, _client, **_kwargs) -> None:
         nonlocal login_calls
         login_calls += 1
 
@@ -938,3 +942,88 @@ def test_query_schedule_with_session_reuse_does_not_retry_non_session_error(
 
     assert login_calls == 0
     assert run_calls == 1
+
+
+@pytest.mark.parametrize(
+    ("query_func", "run_name", "result_factory"),
+    [
+        (
+            app_module.query_grades_with_session_reuse,
+            "run_grade_query",
+            _query_result,
+        ),
+        (
+            app_module.query_exams_with_session_reuse,
+            "run_exam_query",
+            _exam_query_result,
+        ),
+        (
+            app_module.query_schedule_with_session_reuse,
+            "run_schedule_query",
+            _schedule_query_result,
+        ),
+    ],
+)
+@pytest.mark.parametrize(
+    ("allow_manual_captcha", "expected_timeout"),
+    [(True, 60), (False, None)],
+)
+def test_manual_captcha_timeout_follows_allow_flag(
+    monkeypatch,
+    query_func,
+    run_name: str,
+    result_factory,
+    allow_manual_captcha: bool,
+    expected_timeout: int | None,
+) -> None:
+    previous_state = _runtime_state()
+    recognize_callbacks: list[object] = []
+    timeout_values: list[int | None] = []
+
+    class FakeClient:
+        def __init__(self, **kwargs: object) -> None:
+            self.kwargs = kwargs
+
+        def __enter__(self) -> "FakeClient":
+            return self
+
+        def __exit__(self, *args: object) -> None:
+            return None
+
+        def load_cookies(self, cookies: dict[str, str] | None) -> None:
+            assert cookies == {}
+
+        def check_reachable(self) -> None:
+            return None
+
+        def export_cookies(self) -> dict[str, str]:
+            return {"JSESSIONID": "new"}
+
+        def reset_session(self) -> None:
+            raise AssertionError("reset_session should not be needed")
+
+    monkeypatch.setattr(app_module, "load_runtime_state", lambda _cfg: previous_state)
+    monkeypatch.setattr(app_module, "JWXTClient", FakeClient)
+
+    def fake_login(_cfg, _client, *, recognize_captcha) -> None:
+        recognize_callbacks.append(recognize_captcha)
+
+    def fake_recognize_captcha(_image, *, manual_timeout_seconds) -> str:
+        timeout_values.append(manual_timeout_seconds)
+        return "1234"
+
+    monkeypatch.setattr(app_module, "login", fake_login)
+    monkeypatch.setattr(app_module, "recognize_captcha", fake_recognize_captcha)
+    monkeypatch.setattr(app_module, run_name, lambda *args, **kwargs: result_factory())
+
+    result = query_func(
+        _config(),
+        force_email=False,
+        trust_env=False,
+        allow_manual_captcha=allow_manual_captcha,
+    )
+
+    assert result is not None
+    assert len(recognize_callbacks) == 1
+    assert recognize_callbacks[0](b"image", _config()) == "1234"
+    assert timeout_values == [expected_timeout]

@@ -4,7 +4,7 @@ import httpx
 import pytest
 
 from cumt_jwxt_cli.client.http import JWXTClient
-from cumt_jwxt_cli.errors import QueryError
+from cumt_jwxt_cli.errors import QueryError, SessionExpiredError
 
 
 def test_jwxt_client_sets_timeout_headers_and_cookies() -> None:
@@ -162,6 +162,19 @@ def test_jwxt_client_allows_redirect_responses() -> None:
         response = client.post("/xtgl/login_slogin.html", data={})
 
     assert response.status_code == 302
+
+
+def test_jwxt_client_maps_901_to_session_expired() -> None:
+    transport = httpx.MockTransport(lambda request: httpx.Response(901))
+
+    with JWXTClient(
+        timeout_seconds=5,
+        retry_attempts=0,
+        retry_backoff_seconds=0,
+        transport=transport,
+    ) as client:
+        with pytest.raises(SessionExpiredError, match="HTTP 901"):
+            client.post("/cjcx/cjcx_cxXsgrcj.html", data={})
 
 
 def test_jwxt_client_wraps_network_errors_after_retry_budget() -> None:

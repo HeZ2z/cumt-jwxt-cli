@@ -217,6 +217,33 @@ def test_resolve_config_path_prefers_local_config_in_current_directory(
     assert resolve_config_path(None) == config_path.resolve()
 
 
+def test_resolve_config_path_falls_back_to_repo_root(
+    tmp_path,
+    monkeypatch,
+) -> None:
+    """A source checkout's root config should be found when cwd has none."""
+
+    project_root = tmp_path / "proj"
+    module_dir = project_root / "src" / "cumt_jwxt_cli"
+    module_dir.mkdir(parents=True)
+    fake_module = module_dir / "config.py"
+    fake_module.write_text("", encoding="utf-8")
+
+    root_config = project_root / "config.json"
+    _write_config(
+        root_config,
+        {"cumt": {"username": "placeholder", "password": "placeholder"}},
+    )
+
+    elsewhere = tmp_path / "elsewhere"
+    elsewhere.mkdir()
+
+    monkeypatch.setattr("cumt_jwxt_cli.config.__file__", str(fake_module))
+    monkeypatch.chdir(elsewhere)
+
+    assert resolve_config_path(None) == root_config.resolve()
+
+
 def test_load_app_config_auto_derives_scope_when_absent(
     tmp_path,
     monkeypatch,

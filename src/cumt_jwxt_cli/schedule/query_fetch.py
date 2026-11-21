@@ -4,7 +4,8 @@ from __future__ import annotations
 
 from datetime import date
 
-from cumt_jwxt_cli.errors import QueryError
+from cumt_jwxt_cli.client.http import ensure_authenticated_response
+from cumt_jwxt_cli.errors import QueryError, SessionExpiredError
 from cumt_jwxt_cli.models import AppConfig, PeriodTime, ScheduleListData
 from cumt_jwxt_cli.schedule.parser import (
     parse_period_times,
@@ -96,13 +97,7 @@ def query_week_dates(config: AppConfig, client: object) -> dict[int, date]:
 def is_schedule_session_query_failure(exc: QueryError) -> bool:
     """Return whether a query failure likely indicates an expired login session."""
 
-    message = str(exc).lower()
-    session_markers = (
-        "http 901",
-        "redirected with http 30",
-        "html login page",
-    )
-    return any(marker in message for marker in session_markers)
+    return isinstance(exc, SessionExpiredError)
 
 
 def _request_json(
@@ -116,26 +111,9 @@ def _request_json(
         response = client.post(
             path, params=params, data=data, headers=dict(_AJAX_HEADERS)
         )
-        _guard_response(response, label)
+        ensure_authenticated_response(response, label)
         return response.json()
     except ValueError as exc:
         raise QueryError(f"JWXT {label} response is not valid JSON.") from exc
     except AttributeError as exc:
         raise QueryError("JWXT client returned an invalid response object.") from exc
-
-
-def _guard_response(response: object, label: str) -> None:
-    content_type = ""
-    headers = getattr(response, "headers", None)
-    if hasattr(headers, "get"):
-        content_type = str(headers.get("content-type", "")).lower()
-    status_code = getattr(response, "status_code", None)
-    # JWXT returns HTTP 901 when the login session has expired.
-    if status_code == 901:
-        raise QueryError(f"JWXT {label} request failed with HTTP 901.")
-    if status_code in {301, 302, 303, 307, 308}:
-        raise QueryError(
-            f"JWXT {label} request was redirected with HTTP {status_code}."
-        )
-    if "text/html" in content_type:
-        raise QueryError(f"JWXT {label} response looks like an HTML login page.")

@@ -44,6 +44,10 @@ class TestParseWeekRanges:
     def test_single_week(self) -> None:
         assert parse_week_ranges("3周") == (3,)
 
+    def test_tolerates_di_prefix(self) -> None:
+        assert parse_week_ranges("第12周") == (12,)
+        assert parse_week_ranges("第1-3周") == (1, 2, 3)
+
     def test_deduplicates_overlapping_ranges(self) -> None:
         assert parse_week_ranges("1-2周,2-3周") == (1, 2, 3)
 

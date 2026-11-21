@@ -105,7 +105,7 @@ def login(
                     "yzm": captcha_code,
                 },
             )
-            if _looks_logged_in(response):
+            if _looks_logged_in(client, response):
                 cookies = getattr(client, "cookies", None)
                 if callable(cookies):
                     return cookies()
@@ -125,15 +125,52 @@ def login(
     ) from last_error
 
 
-def _looks_logged_in(response: object) -> bool:
-    status_code = getattr(response, "status_code", None)
-    if status_code in {301, 302, 303, 307, 308}:
-        return True
+_LOGIN_FORM_MARKERS = ('name="yhm"', 'name="yzm"', 'name="csrftoken"')
+_REDIRECT_STATUS_CODES = {301, 302, 303, 307, 308}
 
+
+def _looks_logged_in(client: object, response: object) -> bool:
+    status_code = getattr(response, "status_code", None)
+    if status_code in _REDIRECT_STATUS_CODES:
+        location = _redirect_location(response)
+        if location is None:
+            return False
+        if "login_slogin" not in location:
+            return True
+        # Some JWXT deployments redirect a successful login back to the login
+        # page, which then redirects to the menu. Follow one hop so a genuine
+        # failure (login form) is not confused with that success chain.
+        return _login_redirect_resolves_to_menu(client, location)
+
+    return _is_non_login_page(response)
+
+
+def _login_redirect_resolves_to_menu(client: object, location: str) -> bool:
+    try:
+        follow = client.get(location)
+    except Exception:  # noqa: BLE001 - a probe failure is a login failure.
+        return False
+
+    if getattr(follow, "status_code", None) in _REDIRECT_STATUS_CODES:
+        next_location = _redirect_location(follow)
+        return next_location is not None and "login_slogin" not in next_location
+    return _is_non_login_page(follow)
+
+
+def _is_non_login_page(response: object) -> bool:
     html = getattr(response, "text", "")
-    if not isinstance(html, str):
+    if not isinstance(html, str) or not html.strip():
         return False
-    failure_markers = ("验证码", "用户名", "密码", "错误", "失败")
-    if any(marker in html for marker in failure_markers):
-        return False
-    return bool(html.strip())
+    return not any(marker in html for marker in _LOGIN_FORM_MARKERS)
+
+
+def _redirect_location(response: object) -> str | None:
+    headers = getattr(response, "headers", None)
+    getter = getattr(headers, "get", None)
+    if not callable(getter):
+        return None
+    for name in ("Location", "location"):
+        location = getter(name)
+        if isinstance(location, str) and location.strip():
+            return location.strip()
+    return None

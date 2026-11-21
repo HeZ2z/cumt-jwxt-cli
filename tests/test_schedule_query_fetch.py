@@ -5,7 +5,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from cumt_jwxt_cli.errors import QueryError
+from cumt_jwxt_cli.errors import QueryError, SessionExpiredError
 from cumt_jwxt_cli.models import PeriodTime, ScheduleListData
 from cumt_jwxt_cli.schedule.query_fetch import (
     is_schedule_session_query_failure,
@@ -91,7 +91,7 @@ def test_query_schedule_list_raises_when_both_attempts_fail() -> None:
         _FakeResponse(status_code=901),
     )
 
-    with pytest.raises(QueryError, match="901"):
+    with pytest.raises(SessionExpiredError, match="901"):
         query_schedule_list(_config(), client)
 
 
@@ -100,7 +100,7 @@ def test_query_schedule_list_raises_on_901() -> None:
         _FakeResponse(status_code=901), _FakeResponse(status_code=901)
     )
 
-    with pytest.raises(QueryError, match="901"):
+    with pytest.raises(SessionExpiredError, match="901"):
         query_schedule_list(_config(), client)
 
 
@@ -109,7 +109,7 @@ def test_query_schedule_list_raises_on_redirect() -> None:
         _FakeResponse(status_code=302), _FakeResponse(status_code=302)
     )
 
-    with pytest.raises(QueryError, match="redirected with HTTP 302"):
+    with pytest.raises(SessionExpiredError, match="redirected with HTTP 302"):
         query_schedule_list(_config(), client)
 
 
@@ -158,15 +158,15 @@ def test_query_week_dates_returns_monday_mapping() -> None:
 
 
 @pytest.mark.parametrize(
-    ("message", "expected"),
+    ("exc", "expected"),
     [
-        ("request failed with HTTP 901", True),
-        ("request was redirected with HTTP 302", True),
-        ("looks like an HTML login page", True),
-        ("response is not valid JSON", False),
-        ("invalid response object", False),
-        ("request failed after retry attempts", False),
+        (SessionExpiredError("request failed with HTTP 901"), True),
+        (SessionExpiredError("request was redirected with HTTP 302"), True),
+        (SessionExpiredError("looks like an HTML login page"), True),
+        (QueryError("response is not valid JSON"), False),
+        (QueryError("invalid response object"), False),
+        (QueryError("request failed after retry attempts"), False),
     ],
 )
-def test_is_schedule_session_query_failure(message: str, expected: bool) -> None:
-    assert is_schedule_session_query_failure(QueryError(message)) is expected
+def test_is_schedule_session_query_failure(exc: QueryError, expected: bool) -> None:
+    assert is_schedule_session_query_failure(exc) is expected

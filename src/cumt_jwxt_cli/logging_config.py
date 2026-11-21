@@ -45,6 +45,11 @@ def configure_logging(
     root_logger.handlers.clear()
     root_logger.setLevel(logging.DEBUG if verbose else logging.INFO)
 
+    # httpx logs every request at INFO; keep routine CLI output free of it.
+    request_log_level = logging.INFO if verbose else logging.WARNING
+    logging.getLogger("httpx").setLevel(request_log_level)
+    logging.getLogger("httpcore").setLevel(request_log_level)
+
     log_filter = SensitiveDataFilter()
     formatter = logging.Formatter(
         "%(asctime)s %(levelname)s %(name)s: %(message)s",

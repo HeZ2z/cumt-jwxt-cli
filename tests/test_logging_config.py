@@ -36,3 +36,13 @@ def test_configure_logging_creates_config_adjacent_log_file(tmp_path) -> None:
 
     assert (tmp_path / "logs").is_dir()
     assert list((tmp_path / "logs").glob("cumt-jwxt-*.log"))
+
+
+def test_configure_logging_quietens_http_request_logs_by_default(tmp_path) -> None:
+    config_path = tmp_path / "config.local.json"
+
+    configure_logging(config_path=config_path, retention_days=14, verbose=False)
+    assert logging.getLogger("httpx").level == logging.WARNING
+
+    configure_logging(config_path=config_path, retention_days=14, verbose=True)
+    assert logging.getLogger("httpx").level == logging.INFO
